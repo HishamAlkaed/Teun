@@ -58,6 +58,7 @@ WORKDIR /app
 COPY --from=builder /app/target/release/teun /app/teun
 COPY --from=frontend /app/dist /app/dist
 COPY apps/teun/service/config/ /app/config/
+COPY resources/ /app/resources/
 
 RUN useradd -m -s /bin/bash app
 USER app
