@@ -219,6 +219,10 @@ export function ChatInput({ onSend, disabled, scrubEnabled, onScrubSent, searchD
           </div>
         </div>
       </form>
+
+      <p className="mt-2 text-center text-[11px] text-text-tertiary">
+        Teun is een AI-assistent en kan fouten maken. Verifieer antwoorden altijd zelf.
+      </p>
     </div>
   );
 }
