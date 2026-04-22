@@ -24,7 +24,7 @@ export function AssistantResponse({ message, chatMode, onSelect, onFeedback, onA
 
   const answerText = message.structuredAnswer?.answer;
   // Only show the final answer in the main chat — thinking/partial text goes to the sidebar
-  const displayText = answerText || (!isStreaming ? (streamingContent || message.content) : undefined);
+  const displayText = answerText || streamingContent || (!isStreaming ? message.content : undefined);
 
   if (isStreaming && !displayText) {
     // Show a thinking indicator while the agent is working
