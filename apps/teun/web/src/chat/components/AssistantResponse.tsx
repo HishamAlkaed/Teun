@@ -2,6 +2,7 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import type { ChatMessage, MessageFeedback } from "../lib/types";
 import type { ChatMode } from "../hooks/useSettings";
+import { FeedbackPanel } from "./FeedbackPanel";
 
 interface AssistantResponseProps {
   message: ChatMessage;
@@ -13,6 +14,7 @@ interface AssistantResponseProps {
 
 export function AssistantResponse({ message, chatMode, onSelect, onFeedback, onAddToEval }: AssistantResponseProps) {
   const [copied, setCopied] = useState(false);
+  const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
   const timeline = message.timeline ?? [];
   const isStreaming = message.isStreaming ?? false;
   const isInline = chatMode === "inline";
@@ -127,14 +129,15 @@ export function AssistantResponse({ message, chatMode, onSelect, onFeedback, onA
                   </svg>
                 </ActionButton>
 
-                {/* Thumbs down */}
+                {/* Thumbs down — opens inline feedback popup */}
                 <ActionButton
                   title="Afkeuren"
                   onClick={() => {
                     if (message.feedback?.status === "rejected") {
                       onFeedback(message.id, { status: undefined as unknown as MessageFeedback["status"] });
+                      setShowFeedbackPopup(false);
                     } else {
-                      onFeedback(message.id, { status: "rejected" });
+                      setShowFeedbackPopup((v) => !v);
                     }
                   }}
                   active={message.feedback?.status === "rejected"}
@@ -154,6 +157,18 @@ export function AssistantResponse({ message, chatMode, onSelect, onFeedback, onA
                 </svg>
               </ActionButton>
             )}
+          </div>
+        )}
+        {showFeedbackPopup && onFeedback && (
+          <div className="mt-2 pl-1 max-w-sm">
+            <FeedbackPanel
+              feedback={message.feedback}
+              compact
+              onSubmit={(fb) => {
+                onFeedback(message.id, fb);
+                setShowFeedbackPopup(false);
+              }}
+            />
           </div>
         )}
       </div>

@@ -119,8 +119,19 @@ export function useChat(chatMode: ChatMode = "tools", language: UILanguage = "nl
               }
               entry.data.structured_output = structuredAnswer;
               if (event.data.session_id) {
-                setSessionId(event.data.session_id);
+                setSessionId(event.data.session_id as string);
                 setPendingTitle(undefined);
+              }
+              // Update assistant message ID to the server-assigned UUID so
+              // feedback API calls use the correct ID without needing a refresh.
+              if (event.data.message_id && typeof event.data.message_id === "string") {
+                const serverId = event.data.message_id;
+                if (pendingMessagesRef.current) {
+                  pendingMessagesRef.current = pendingMessagesRef.current.map((m) =>
+                    m.id === assistantMsg.id ? { ...m, id: serverId } : m
+                  );
+                }
+                assistantMsg.id = serverId;
               }
               break;
             }

@@ -83,6 +83,10 @@ async fn chat(
     // Only pass session_id to --resume if the client provided one (from a previous Claude response)
     let claude_session_id = req.session_id.clone();
 
+    // Generate the assistant message ID before the stream starts so we can
+    // send it to the frontend in the Result event for feedback API calls.
+    let assistant_msg_id = uuid::Uuid::new_v4().to_string();
+
     let (tx, rx) = mpsc::channel::<ChatEvent>(32);
 
     let config = ClaudeConfig::from_env();
@@ -303,6 +307,9 @@ async fn chat(
         }
     });
 
+    // Clone for SSE injection before persist task moves the original
+    let assistant_msg_id_sse = assistant_msg_id.clone();
+
     // Spawn a task to persist the session after the stream completes
     let sessions = state.sessions.clone();
     let existing_session_id = req.session_id.clone();
@@ -400,7 +407,7 @@ async fn chat(
         }
 
         let assistant_msg = StoredMessage {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: assistant_msg_id,
             role: "assistant".to_string(),
             content,
             structured_answer,
@@ -432,7 +439,20 @@ async fn chat(
             ChatEvent::Judge { .. } => "judge",
         };
 
-        let data = serde_json::to_string(&event).unwrap_or_default();
+        // Inject message_id into Result events so the frontend can use it
+        // for feedback API calls without requiring a page refresh.
+        let data = if let ChatEvent::Result { structured_output, session_id } = &event {
+            serde_json::json!({
+                "type": "result",
+                "data": {
+                    "structured_output": structured_output,
+                    "session_id": session_id,
+                    "message_id": assistant_msg_id_sse,
+                }
+            }).to_string()
+        } else {
+            serde_json::to_string(&event).unwrap_or_default()
+        };
         Ok::<_, Infallible>(Event::default().event(event_type).data(data))
     });
 
