@@ -150,6 +150,7 @@ export function ChatPage() {
           <ChatContainer
             messages={chat.messages}
             send={chat.send}
+            stop={chat.stop}
             isLoading={chat.isLoading}
             chatMode="inline"
             scrubEnabled={scrubEnabled}

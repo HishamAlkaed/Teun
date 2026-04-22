@@ -18,6 +18,8 @@ export function useChat(chatMode: ChatMode = "tools", language: UILanguage = "nl
   const [sessionId, setSessionId] = useState<string | undefined>();
   // Track in-flight request title so the sidebar pending entry survives navigation
   const [pendingTitle, setPendingTitle] = useState<string | undefined>();
+  // AbortController for cancelling the in-flight stream
+  const abortControllerRef = useRef<AbortController | null>(null);
   // The in-progress messages, updated by the streaming loop regardless of what's displayed
   const pendingMessagesRef = useRef<ChatMessage[] | null>(null);
   // Whether the user is currently viewing the in-progress chat
@@ -50,8 +52,11 @@ export function useChat(chatMode: ChatMode = "tools", language: UILanguage = "nl
       setIsLoading(true);
       setPendingTitle(text.slice(0, 80));
 
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       try {
-        const response = await sendMessage(text, sessionId, chatMode, language, searchDepth);
+        const response = await sendMessage(text, sessionId, chatMode, language, searchDepth, abortController.signal);
 
         if (!response.ok) {
           if (response.status === 401) {
@@ -280,6 +285,10 @@ export function useChat(chatMode: ChatMode = "tools", language: UILanguage = "nl
     [sessionId],
   );
 
+  const stop = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
   const newSession = useCallback(() => {
     viewingPendingRef.current = false;
     setMessages([]);
@@ -295,5 +304,5 @@ export function useChat(chatMode: ChatMode = "tools", language: UILanguage = "nl
     }]);
   }, []);
 
-  return { messages, send, isLoading, sessionId, pendingTitle, returnToPending, loadSession, newSession, updateMessageFeedback, addSystemMessage };
+  return { messages, send, stop, isLoading, sessionId, pendingTitle, returnToPending, loadSession, newSession, updateMessageFeedback, addSystemMessage };
 }
