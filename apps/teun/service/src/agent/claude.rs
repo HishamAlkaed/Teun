@@ -24,7 +24,7 @@ impl ClaudeConfig {
 
         Self {
             model: std::env::var("CLAUDE_MODEL")
-                .unwrap_or_else(|_| "claude-sonnet-4-20250514".to_string()),
+                .unwrap_or_else(|_| "claude-sonnet-4-6".to_string()),
             skill_path: std::env::var("SKILL_PATH")
                 .unwrap_or_else(|_| {
                     // Container: /app/config/acceptatie-beleid.md

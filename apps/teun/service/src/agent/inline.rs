@@ -27,7 +27,7 @@ impl InlineConfig {
             api_key,
             model: std::env::var("INLINE_MODEL")
                 .or_else(|_| std::env::var("CLAUDE_MODEL"))
-                .unwrap_or_else(|_| "claude-haiku-4-5-20241022".to_string()),
+                .unwrap_or_else(|_| "claude-opus-4-6".to_string()),
             skill_path: std::env::var("SKILL_PATH")
                 .unwrap_or_else(|_| {
                     let container_path = format!("{}/config/acceptatie-beleid.md", project_root);

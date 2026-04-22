@@ -83,5 +83,14 @@ jobs:
           file: apps/teun/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            cloud.nextepoch.build.app_slug=teun
+            cloud.nextepoch.build.org_slug=dmfco
+            cloud.nextepoch.build.commit_sha=${{ github.sha }}
+            cloud.nextepoch.build.repo_url=${{ github.server_url }}/${{ github.repository }}
+            cloud.nextepoch.build.workflow_run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=teun
           cache-from: type=gha
           cache-to: type=gha,mode=max
