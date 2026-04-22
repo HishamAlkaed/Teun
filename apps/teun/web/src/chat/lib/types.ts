@@ -110,7 +110,7 @@ export interface ChatEventPartial {
 
 export interface ChatEventResult {
   type: "result";
-  data: { structured_output: MortgageAnswer; session_id: string };
+  data: { structured_output: MortgageAnswer; session_id: string; message_id?: string };
 }
 
 export interface ChatEventError {
