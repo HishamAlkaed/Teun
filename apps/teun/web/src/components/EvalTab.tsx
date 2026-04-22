@@ -7,7 +7,7 @@ export function EvalTab() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<string>("inline");
+  const mode = "inline";
 
   const loadRuns = useCallback(() => {
     void listEvalRuns().then(setRuns);
