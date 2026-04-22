@@ -67,13 +67,14 @@ fn build_system_prompt(config: &InlineConfig) -> Result<String> {
         "1. Gebruik ALTIJD de Grep en Read tools om de beleidsdocumenten te doorzoeken voordat je antwoordt.\n\
          2. Doorzoek eerst met Grep op relevante termen, lees dan de gevonden secties met Read.\n\
          3. Baseer je antwoord UITSLUITEND op wat er in de documenten staat.\n\
-         4. Als informatie niet in de documenten te vinden is, zeg dat eerlijk.\n\
-         5. Noteer bij het lezen met Read de regelnummers van relevante passages. Gebruik deze als `line_range` in de bronverwijzingen.\n\
-         6. Kopieer het relevante citaat LETTERLIJK uit het document voor het `quote` veld. Dit citaat wordt getoond aan de gebruiker als bewijs.",
-        "1. De volledige beleidsdocumenten staan hieronder in de systeemprompt.\n\
+         4. Als informatie niet in de documenten te vinden is, zeg dat eerlijk en vraag om verduidelijking — verzin NOOIT informatie, paginanummers, secties of citaten die niet in de documenten staan.\n\
+         5. Noteer bij het lezen met Read de **regelnummers** (de nummers links van de tekst) van relevante passages. Gebruik deze als `line_range` in de bronverwijzingen. Het `line_range` veld MOET numeriek zijn, bijv. \"120-135\" of \"42\". NOOIT secienamen of tekst in dit veld.\n\
+         6. Kopieer het relevante citaat LETTERLIJK uit het document voor het `quote` veld. Dit citaat wordt getoond aan de gebruiker als bewijs. De quote wordt automatisch geverifieerd tegen het document op de opgegeven regelnummers — als de quote niet overeenkomt, wordt de bron als onbetrouwbaar gemarkeerd.",
+        "1. De volledige beleidsdocumenten staan hieronder in de systeemprompt. Elke regel begint met een regelnummer gevolgd door ': ', bijv. '1293: tekst'.\n\
          2. Baseer je antwoord UITSLUITEND op wat er in de documenten staat.\n\
-         3. Als informatie niet in de documenten te vinden is, zeg dat eerlijk.\n\
-         4. Kopieer het relevante citaat LETTERLIJK uit het document voor het `quote` veld.",
+         3. Als informatie niet in de documenten te vinden is, zeg dat eerlijk — verzin NOOIT informatie.\n\
+         4. Gebruik het zichtbare regelnummer als `line_range` in bronverwijzingen (bijv. \"1293\" of \"1293-1295\"). NOOIT sectienamen of tekst in dit veld.\n\
+         5. Kopieer het relevante citaat LETTERLIJK uit het document voor het `quote` veld, maar ZONDER het regelnummer-prefix (dus NIET '1293: tekst', maar gewoon 'tekst').",
     );
 
     // Load all resource documents
@@ -107,7 +108,9 @@ fn load_inline_documents(resources_dir: &str) -> Result<String> {
         let text = std::fs::read_to_string(&path)
             .with_context(|| format!("Failed to read {}", path.display()))?;
         content.push_str(&format!("### Document: {filename}\n\n"));
-        content.push_str(&text);
+        for (i, line) in text.lines().enumerate() {
+            content.push_str(&format!("{}: {}\n", i + 1, line));
+        }
         content.push_str("\n\n---\n\n");
     }
 
@@ -189,11 +192,14 @@ pub async fn run_inline(
         anyhow::bail!("Anthropic API error {status}: {text}");
     }
 
-    // Process SSE stream — extract the "answer" field from growing JSON and stream it
+    // Process SSE stream — stream the answer text directly, parse JSON after separator
+    // Expected format: "<answer text>\n---JSON---\n{...}"
+    const SEPARATOR: &str = "\n---JSON---";
     let mut full_text = String::new();
     let mut session_id = String::new();
     let mut bytes_stream = resp.bytes_stream();
-    let mut last_answer_len = 0usize;
+    let mut last_partial_len = 0usize;
+    let mut separator_found = false;
 
     use futures::StreamExt;
     let mut buffer = String::new();
@@ -227,22 +233,34 @@ pub async fn run_inline(
                             if let Some(text) = event["delta"]["text"].as_str() {
                                 full_text.push_str(text);
 
-                                // Extract the "answer" value from the partial JSON
-                                // so the frontend sees readable text, not raw JSON
-                                if let Some(answer_text) = extract_partial_answer(&full_text) {
-                                    if answer_text.len() > last_answer_len {
-                                        last_answer_len = answer_text.len();
-                                        let _ = tx
-                                            .send(ChatEvent::Partial {
-                                                content: answer_text,
-                                            })
-                                            .await;
+                                if !separator_found {
+                                    if let Some(sep_pos) = full_text.find(SEPARATOR) {
+                                        // Separator found — emit final answer text and stop streaming
+                                        separator_found = true;
+                                        let answer_text = full_text[..sep_pos].trim_end().to_string();
+                                        if !answer_text.is_empty() {
+                                            let _ = tx.send(ChatEvent::Partial { content: answer_text }).await;
+                                        }
+                                    } else {
+                                        // Stream text up to a safe point, leaving room for partial separator
+                                        let safe_len = full_text.len().saturating_sub(SEPARATOR.len());
+                                        if safe_len > last_partial_len {
+                                            last_partial_len = safe_len;
+                                            let _ = tx.send(ChatEvent::Partial {
+                                                content: full_text[..safe_len].to_string(),
+                                            }).await;
+                                        }
                                     }
                                 }
                             }
                         }
                         Some("message_stop") => {
-                            // Stream complete
+                            // Stream complete — flush any remaining answer text
+                            if !separator_found && full_text.len() > last_partial_len {
+                                let _ = tx.send(ChatEvent::Partial {
+                                    content: full_text.trim_end().to_string(),
+                                }).await;
+                            }
                         }
                         _ => {}
                     }
@@ -251,13 +269,13 @@ pub async fn run_inline(
         }
     }
 
-    // Try to extract structured JSON from the full response
-    let mortgage_answer = extract_structured_json(&full_text);
+    // Parse structured output from the two-phase response
+    let mortgage_answer = parse_two_phase_response(&full_text);
 
     let structured_output = if let Some(ref answer) = mortgage_answer {
         serde_json::to_value(answer).unwrap_or_else(|_| serde_json::json!({ "answer": &full_text }))
     } else {
-        serde_json::json!({ "answer": &full_text })
+        serde_json::json!({ "answer": full_text.trim() })
     };
 
     let _ = tx
@@ -270,87 +288,55 @@ pub async fn run_inline(
     Ok(mortgage_answer)
 }
 
-/// Extract the "answer" field value from a partially-built JSON string.
-/// As the LLM streams `{"answer": "text...", "rationale": ...}`, we parse
-/// the answer value so the frontend can show readable text instead of raw JSON.
-fn extract_partial_answer(text: &str) -> Option<String> {
-    // Find the "answer" key — try both with and without space after colon
-    let marker_pos = text.find("\"answer\":")?;
-    let after_key = text[marker_pos + "\"answer\":".len()..].trim_start();
+/// Parse a two-phase response: plain text answer followed by `---JSON---` and structured data.
+/// Returns a MortgageAnswer combining the streamed text with the parsed JSON metadata.
+fn parse_two_phase_response(text: &str) -> Option<MortgageAnswer> {
+    const SEPARATOR: &str = "\n---JSON---";
 
-    if !after_key.starts_with('"') {
-        return None;
-    }
-    let value_content = &after_key[1..]; // skip opening quote
+    if let Some(sep_pos) = text.find(SEPARATOR) {
+        let answer_text = text[..sep_pos].trim().to_string();
+        let json_part = text[sep_pos + SEPARATOR.len()..].trim();
 
-    // Read the string value, handling JSON escape sequences
-    let mut result = String::new();
-    let mut chars = value_content.chars();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            match chars.next() {
-                Some('n') => result.push('\n'),
-                Some('t') => result.push('\t'),
-                Some('"') => result.push('"'),
-                Some('\\') => result.push('\\'),
-                Some(other) => {
-                    result.push('\\');
-                    result.push(other);
-                }
-                None => break, // incomplete escape at end of stream
-            }
-        } else if c == '"' {
-            break; // end of the answer field
-        } else {
-            result.push(c);
+        // Parse the JSON metadata (rationale, sources, category — no answer field)
+        #[derive(serde::Deserialize)]
+        struct StructuredPart {
+            #[serde(default)]
+            rationale: String,
+            #[serde(default)]
+            sources: Vec<super::types::SourceReference>,
+            #[serde(default)]
+            category: Option<super::types::AnswerCategory>,
         }
-    }
 
-    if result.is_empty() {
-        None
+        // Strip markdown code fences if present
+        let json_str = json_part
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim();
+
+        let parts = serde_json::from_str::<StructuredPart>(json_str).unwrap_or_else(|_| StructuredPart {
+            rationale: String::new(),
+            sources: vec![],
+            category: None,
+        });
+
+        Some(MortgageAnswer {
+            answer: answer_text,
+            rationale: parts.rationale,
+            sources: parts.sources,
+            category: parts.category.unwrap_or(super::types::AnswerCategory::Standard),
+        })
     } else {
-        Some(result)
-    }
-}
-
-/// Try to extract structured JSON from text that may contain markdown code blocks.
-fn extract_structured_json(text: &str) -> Option<MortgageAnswer> {
-    // Try direct parse
-    if let Ok(answer) = serde_json::from_str::<MortgageAnswer>(text) {
-        return Some(answer);
-    }
-
-    // Try extracting from ```json ... ```
-    if let Some(start) = text.find("```json") {
-        let json_start = start + 7;
-        if let Some(end) = text[json_start..].find("```") {
-            let json_str = text[json_start..json_start + end].trim();
-            if let Ok(answer) = serde_json::from_str::<MortgageAnswer>(json_str) {
-                return Some(answer);
-            }
+        // No separator — fall back to treating the whole text as the answer
+        if text.trim().is_empty() {
+            return None;
         }
+        Some(MortgageAnswer {
+            answer: text.trim().to_string(),
+            rationale: String::new(),
+            sources: vec![],
+            category: super::types::AnswerCategory::Standard,
+        })
     }
-
-    // Try extracting from ``` ... ```
-    if let Some(start) = text.find("```\n") {
-        let json_start = start + 4;
-        if let Some(end) = text[json_start..].find("```") {
-            let json_str = text[json_start..json_start + end].trim();
-            if let Ok(answer) = serde_json::from_str::<MortgageAnswer>(json_str) {
-                return Some(answer);
-            }
-        }
-    }
-
-    // Try finding JSON object in text
-    if let Some(start) = text.find('{') {
-        if let Some(end) = text.rfind('}') {
-            let json_str = &text[start..=end];
-            if let Ok(answer) = serde_json::from_str::<MortgageAnswer>(json_str) {
-                return Some(answer);
-            }
-        }
-    }
-
-    None
 }
