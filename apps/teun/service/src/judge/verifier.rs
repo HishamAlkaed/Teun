@@ -291,7 +291,25 @@ fn word_lcs_len(a: &[&str], b: &[&str]) -> usize {
 }
 
 fn normalize(s: &str) -> String {
-    s.chars()
+    // Strip inline line-number prefixes (e.g. "1293: " or "42: ") that the
+    // inline agent may include when copying quotes from numbered document lines.
+    let stripped: String = s
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            // Match "digits: " at the start of a line
+            if let Some(rest) = trimmed.split_once(": ") {
+                if rest.0.chars().all(|c| c.is_ascii_digit()) && !rest.0.is_empty() {
+                    return rest.1;
+                }
+            }
+            line
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    stripped
+        .chars()
         .map(|c| if c.is_whitespace() { ' ' } else { c })
         .filter(|c| !matches!(c, '*' | '_' | '`' | '#' | '[' | ']' | '(' | ')'))
         .collect::<String>()
