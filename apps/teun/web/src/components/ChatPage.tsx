@@ -10,7 +10,7 @@ import { getBackendSettings } from "../chat/lib/api";
 
 export function ChatPage() {
   const { settings } = useSettings();
-  const chat = useChat(settings.chatMode, settings.language, settings.searchDepth);
+  const chat = useChat("inline", settings.language, "quick");
   const [scrubEnabled, setScrubEnabled] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | undefined>();
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
@@ -151,7 +151,7 @@ export function ChatPage() {
             messages={chat.messages}
             send={chat.send}
             isLoading={chat.isLoading}
-            chatMode={settings.chatMode}
+            chatMode="inline"
             scrubEnabled={scrubEnabled}
             onScrubSent={handleScrubSent}
             selectedMessageId={activeMessageId}

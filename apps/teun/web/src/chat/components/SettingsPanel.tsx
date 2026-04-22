@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSettings, type ChatMode, type UILanguage } from "../hooks/useSettings";
+import { useSettings, type UILanguage } from "../hooks/useSettings";
 import { getBackendSettings, updateBackendSettings } from "../lib/api";
 import type { BackendSettings } from "../lib/types";
 
@@ -75,33 +75,6 @@ export function SettingsPanel() {
             </span>
           </div>
         </div>
-      </div>
-
-      {/* Chat mode */}
-      <div className="space-y-3">
-        <label className="text-sm font-medium text-text-primary">
-          Chat modus
-        </label>
-        <div className="flex gap-2">
-          {(["tools", "inline"] as ChatMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => updateSettings({ chatMode: mode })}
-              className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${
-                settings.chatMode === mode
-                  ? "bg-accent text-white border-accent"
-                  : "bg-surface text-text-secondary border-border hover:border-accent/50"
-              }`}
-            >
-              {mode === "tools" ? "Tools" : "Inline"}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-text-tertiary">
-          {settings.chatMode === "tools"
-            ? "Claude doorzoekt beleidsdocumenten met Grep en Read tools. Geeft nauwkeurige bronverwijzingen met regelnummers."
-            : "Alle beleidsdocumenten worden in de systeemprompt geladen. Geen tool-gebruik, snellere antwoorden."}
-        </p>
       </div>
 
       {/* Language */}
