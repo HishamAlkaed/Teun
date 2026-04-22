@@ -8,6 +8,7 @@ import { AssistantResponse } from "./AssistantResponse";
 interface ChatContainerProps {
   messages: ChatMessage[];
   send: (text: string) => void;
+  stop?: () => void;
   isLoading: boolean;
   chatMode?: ChatMode;
   scrubEnabled?: boolean;
@@ -18,7 +19,7 @@ interface ChatContainerProps {
   onAddToEval?: (messageId: string) => void;
 }
 
-export function ChatContainer({ messages, send, isLoading, chatMode, scrubEnabled, onScrubSent, onSelectMessage, onFeedback, onAddToEval }: ChatContainerProps) {
+export function ChatContainer({ messages, send, stop, isLoading, chatMode, scrubEnabled, onScrubSent, onSelectMessage, onFeedback, onAddToEval }: ChatContainerProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export function ChatContainer({ messages, send, isLoading, chatMode, scrubEnable
         <div ref={bottomRef} />
       </div>
       <div className="border-t border-border bg-page-bg px-4 py-3">
-        <ChatInput onSend={send} disabled={isLoading} scrubEnabled={scrubEnabled} onScrubSent={onScrubSent} />
+        <ChatInput onSend={send} onStop={stop} disabled={isLoading} scrubEnabled={scrubEnabled} onScrubSent={onScrubSent} />
       </div>
     </div>
   );

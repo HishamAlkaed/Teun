@@ -8,10 +8,11 @@ export async function sendMessage(
   mode?: string,
   language?: string,
   searchDepth?: string,
+  signal?: AbortSignal,
 ): Promise<Response> {
   return fetch(`${API_BASE}/chat`, {
     method: "POST",
-
+    signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message,

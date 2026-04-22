@@ -6,12 +6,13 @@ import type { ScrubResponse } from "../lib/types";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onStop?: () => void;
   disabled: boolean;
   scrubEnabled?: boolean;
   onScrubSent?: () => void;
 }
 
-export function ChatInput({ onSend, disabled, scrubEnabled, onScrubSent }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, disabled, scrubEnabled, onScrubSent }: ChatInputProps) {
   const [text, setText] = useState("");
   const voice = useVoiceInput();
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -121,25 +122,38 @@ export function ChatInput({ onSend, disabled, scrubEnabled, onScrubSent }: ChatI
               disabled={disabled}
               className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none disabled:cursor-not-allowed"
             />
-            <button
-              type="submit"
-              disabled={disabled || !text.trim() || isScrubbing}
-              className={`rounded-lg p-2 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors ${
-                scrubResult ? "bg-amber-500 hover:bg-amber-600" : "bg-accent hover:bg-accent/90"
-              }`}
-              title={scrubResult ? "Geschoond bericht verzenden" : undefined}
-            >
-              {isScrubbing ? (
-                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            {disabled && onStop ? (
+              <button
+                type="button"
+                onClick={onStop}
+                className="rounded-lg p-2 bg-red-500 hover:bg-red-600 text-white transition-colors"
+                title="Stop genereren"
+              >
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="6" width="12" height="12" rx="1" />
                 </svg>
-              ) : (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
-                </svg>
-              )}
-            </button>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={disabled || !text.trim() || isScrubbing}
+                className={`rounded-lg p-2 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors ${
+                  scrubResult ? "bg-amber-500 hover:bg-amber-600" : "bg-accent hover:bg-accent/90"
+                }`}
+                title={scrubResult ? "Geschoond bericht verzenden" : undefined}
+              >
+                {isScrubbing ? (
+                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                  </svg>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Toolbar row */}

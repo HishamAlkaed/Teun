@@ -7,7 +7,7 @@ export function EvalTab() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<string>("inline");
+  const mode = "inline";
 
   const loadRuns = useCallback(() => {
     void listEvalRuns().then(setRuns);
@@ -48,13 +48,6 @@ export function EvalTab() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-sm font-medium text-text-secondary">Evaluaties</h2>
         <div className="flex items-center gap-2">
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value)}
-            className="px-3 py-2 text-xs border border-border rounded-lg bg-surface text-text-primary"
-          >
-            <option value="inline">Inline</option>
-          </select>
           <button
             onClick={handleStart}
             disabled={starting}
