@@ -305,7 +305,7 @@ export function TeunWelcome({ onSend }: TeunWelcomeProps) {
       {/* Tagline */}
       <div className="animate-fade-up text-center" style={{ animationDelay: "1.2s" }}>
         <div className="w-10 h-[3px] bg-accent rounded-sm mx-auto mb-5" />
-        <p className="font-serif text-[22px] font-bold uppercase tracking-[0.02em] text-text-primary mb-1">
+        <p className="font-sans text-[22px] font-bold uppercase tracking-[0.02em] text-text-primary mb-1">
           <span className="text-accent">Teun.</span> Jouw geheugensteun.
         </p>
         <p className="text-[15px] text-gray font-normal">Alles wat je nodig hebt, binnen handbereik.</p>
