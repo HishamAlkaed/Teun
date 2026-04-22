@@ -17,7 +17,7 @@ const STORAGE_KEY = "teun-settings";
 const defaults: AppSettings = {
   judgeThreshold: 70,
   judgeLowThreshold: 40,
-  chatMode: "tools",
+  chatMode: "inline",
   searchDepth: "quick",
   language: "nl",
 };

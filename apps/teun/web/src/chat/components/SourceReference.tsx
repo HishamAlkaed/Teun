@@ -21,7 +21,7 @@ export function SourceReference({ source }: SourceReferenceProps) {
           <div className="min-w-0 flex-1">
             <button
               onClick={() => setViewerOpen(true)}
-              className="font-medium text-accent hover:underline truncate block text-left cursor-pointer"
+              className="font-medium text-accent hover:underline truncate block w-full text-left cursor-pointer"
               title="Open document"
             >
               {source.document.replace(/\.md$/, "")}

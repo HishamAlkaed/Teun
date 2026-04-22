@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useVoiceInput } from "../hooks/useVoiceInput";
-import type { SearchDepth } from "../hooks/useSettings";
 import { VoiceButton } from "./VoiceButton";
 import { scrubMessage } from "../lib/api";
 import type { ScrubResponse } from "../lib/types";
@@ -10,33 +9,14 @@ interface ChatInputProps {
   disabled: boolean;
   scrubEnabled?: boolean;
   onScrubSent?: () => void;
-  searchDepth: SearchDepth;
-  onSearchDepthChange: (depth: SearchDepth) => void;
 }
 
-const depthOptions: { value: SearchDepth; label: string }[] = [
-  { value: "quick", label: "Snel zoeken" },
-  { value: "extensive", label: "Uitgebreid zoeken" },
-];
-
-export function ChatInput({ onSend, disabled, scrubEnabled, onScrubSent, searchDepth, onSearchDepthChange }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, scrubEnabled, onScrubSent }: ChatInputProps) {
   const [text, setText] = useState("");
   const voice = useVoiceInput();
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubResult, setScrubResult] = useState<ScrubResponse | null>(null);
   const [scrubError, setScrubError] = useState<string | null>(null);
-  const [depthOpen, setDepthOpen] = useState(false);
-  const depthRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (depthRef.current && !depthRef.current.contains(e.target as Node)) {
-        setDepthOpen(false);
-      }
-    };
-    if (depthOpen) document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [depthOpen]);
 
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -90,8 +70,6 @@ export function ChatInput({ onSend, disabled, scrubEnabled, onScrubSent, searchD
     setScrubResult(null);
     setScrubError(null);
   };
-
-  const currentDepth = depthOptions.find((o) => o.value === searchDepth)!;
 
   return (
     <div>
@@ -178,38 +156,6 @@ export function ChatInput({ onSend, disabled, scrubEnabled, onScrubSent, searchD
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Search depth dropdown */}
-              <div className="relative" ref={depthRef}>
-                <button
-                  type="button"
-                  onClick={() => setDepthOpen(!depthOpen)}
-                  className="flex items-center gap-1 text-[11px] text-text-secondary hover:text-text-primary transition-colors"
-                >
-                  {currentDepth.label}
-                  <svg className={`h-3 w-3 transition-transform ${depthOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                  </svg>
-                </button>
-                {depthOpen && (
-                  <div className="absolute bottom-full right-0 mb-1 bg-surface border border-border rounded-md shadow-lg py-1 min-w-[150px] z-10">
-                    {depthOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => { onSearchDepthChange(opt.value); setDepthOpen(false); }}
-                        className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
-                          searchDepth === opt.value
-                            ? "text-accent font-medium bg-accent/5"
-                            : "text-text-secondary hover:bg-surface-hover"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               <VoiceButton
                 isListening={voice.isListening}
                 isSupported={voice.isSupported}

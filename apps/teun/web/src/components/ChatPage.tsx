@@ -9,7 +9,7 @@ import { AddToEvalModal } from "../chat/components/AddToEvalModal";
 import { getBackendSettings } from "../chat/lib/api";
 
 export function ChatPage() {
-  const { settings, updateSettings } = useSettings();
+  const { settings } = useSettings();
   const chat = useChat(settings.chatMode, settings.language, settings.searchDepth);
   const [scrubEnabled, setScrubEnabled] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | undefined>();
@@ -20,6 +20,8 @@ export function ChatPage() {
   const { sessionId: urlSessionId } = useParams<{ sessionId?: string }>();
   const initialMessageSent = useRef(false);
   const urlSessionLoaded = useRef<string | undefined>(undefined);
+  // Prevents Effect 2 from correcting the URL back to the old session while loadSession is in-flight
+  const isLoadingSessionRef = useRef(false);
 
   useEffect(() => {
     getBackendSettings()
@@ -31,12 +33,17 @@ export function ChatPage() {
   useEffect(() => {
     if (urlSessionId && urlSessionId !== urlSessionLoaded.current && urlSessionId !== chat.sessionId) {
       urlSessionLoaded.current = urlSessionId;
-      chat.loadSession(urlSessionId);
+      isLoadingSessionRef.current = true;
+      void chat.loadSession(urlSessionId).finally(() => {
+        isLoadingSessionRef.current = false;
+      });
     }
   }, [urlSessionId, chat]);
 
-  // Sync URL when sessionId changes (after sending a message or loading a session)
+  // Sync URL when sessionId changes (after sending a message or loading a session).
+  // Skip while a session load is in-flight to avoid bouncing the URL back to the old session.
   useEffect(() => {
+    if (isLoadingSessionRef.current) return;
     if (chat.sessionId && chat.sessionId !== urlSessionId) {
       navigate(`/chat/${chat.sessionId}`, { replace: true });
     } else if (!chat.sessionId && urlSessionId) {
@@ -145,8 +152,6 @@ export function ChatPage() {
             send={chat.send}
             isLoading={chat.isLoading}
             chatMode={settings.chatMode}
-            searchDepth={settings.searchDepth}
-            onSearchDepthChange={(depth) => updateSettings({ searchDepth: depth })}
             scrubEnabled={scrubEnabled}
             onScrubSent={handleScrubSent}
             selectedMessageId={activeMessageId}
