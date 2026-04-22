@@ -7,37 +7,14 @@ export type SearchDepth = "quick" | "extensive";
 export interface AppSettings {
   judgeThreshold: number;
   judgeLowThreshold: number;
-  chatMode: ChatMode;
-  searchDepth: SearchDepth;
   language: UILanguage;
 }
-
-const STORAGE_KEY = "teun-settings";
 
 const defaults: AppSettings = {
   judgeThreshold: 70,
   judgeLowThreshold: 40,
-  chatMode: "tools",
-  searchDepth: "quick",
   language: "nl",
 };
-
-function loadSettings(): AppSettings {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as Partial<AppSettings>;
-      return { ...defaults, ...parsed };
-    }
-  } catch {
-    /* ignore */
-  }
-  return defaults;
-}
-
-function saveSettings(settings: AppSettings): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-}
 
 interface SettingsContextValue {
   settings: AppSettings;
@@ -47,14 +24,10 @@ interface SettingsContextValue {
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [settings, setSettings] = useState<AppSettings>(defaults);
 
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...partial };
-      saveSettings(next);
-      return next;
-    });
+    setSettings((prev) => ({ ...prev, ...partial }));
   }, []);
 
   return (

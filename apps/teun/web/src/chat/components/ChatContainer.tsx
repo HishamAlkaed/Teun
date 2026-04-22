@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage, MessageFeedback } from "../lib/types";
-import type { ChatMode, SearchDepth } from "../hooks/useSettings";
+import type { ChatMode } from "../hooks/useSettings";
 import { ChatInput } from "./ChatInput";
 import { UserMessage } from "./UserMessage";
 import { AssistantResponse } from "./AssistantResponse";
@@ -10,8 +10,6 @@ interface ChatContainerProps {
   send: (text: string) => void;
   isLoading: boolean;
   chatMode?: ChatMode;
-  searchDepth: SearchDepth;
-  onSearchDepthChange: (depth: SearchDepth) => void;
   scrubEnabled?: boolean;
   onScrubSent?: () => void;
   selectedMessageId?: string;
@@ -20,7 +18,7 @@ interface ChatContainerProps {
   onAddToEval?: (messageId: string) => void;
 }
 
-export function ChatContainer({ messages, send, isLoading, chatMode, searchDepth, onSearchDepthChange, scrubEnabled, onScrubSent, onSelectMessage, onFeedback, onAddToEval }: ChatContainerProps) {
+export function ChatContainer({ messages, send, isLoading, chatMode, scrubEnabled, onScrubSent, onSelectMessage, onFeedback, onAddToEval }: ChatContainerProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -65,7 +63,7 @@ export function ChatContainer({ messages, send, isLoading, chatMode, searchDepth
         <div ref={bottomRef} />
       </div>
       <div className="border-t border-border bg-page-bg px-4 py-3">
-        <ChatInput onSend={send} disabled={isLoading} scrubEnabled={scrubEnabled} onScrubSent={onScrubSent} searchDepth={searchDepth} onSearchDepthChange={onSearchDepthChange} />
+        <ChatInput onSend={send} disabled={isLoading} scrubEnabled={scrubEnabled} onScrubSent={onScrubSent} />
       </div>
     </div>
   );
