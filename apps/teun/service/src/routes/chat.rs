@@ -456,7 +456,11 @@ async fn chat(
         Ok::<_, Infallible>(Event::default().event(event_type).data(data))
     });
 
-    Ok(Sse::new(stream).keep_alive(KeepAlive::default()).into_response())
+    let mut resp = Sse::new(stream).keep_alive(KeepAlive::default()).into_response();
+    let headers = resp.headers_mut();
+    headers.insert("x-accel-buffering", "no".parse().unwrap());
+    headers.insert("cache-control", "no-cache".parse().unwrap());
+    Ok(resp)
 }
 
 // Helper to use tokio_stream::StreamExt::map
