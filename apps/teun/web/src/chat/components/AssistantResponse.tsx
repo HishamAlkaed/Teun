@@ -1,8 +1,45 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import type { ChatMessage, MessageFeedback } from "../lib/types";
 import type { ChatMode } from "../hooks/useSettings";
 import { FeedbackPanel } from "./FeedbackPanel";
+
+/**
+ * Typewriter buffer: advance a displayed string toward a target at a steady
+ * cadence while streaming. Smooths over the jittery cadence of upstream
+ * partial chunks (which arrive in irregular bursts).
+ */
+function useTypewriter(target: string, streaming: boolean): string {
+  const [displayed, setDisplayed] = useState(target);
+  const targetRef = useRef(target);
+  targetRef.current = target;
+
+  useEffect(() => {
+    if (!streaming) {
+      setDisplayed(targetRef.current);
+      return;
+    }
+    let raf = 0;
+    const tick = () => {
+      setDisplayed((cur) => {
+        const t = targetRef.current;
+        // Target changed underneath us (e.g. final answer trimmed) — snap.
+        if (!t.startsWith(cur.slice(0, Math.min(cur.length, t.length)))) {
+          return t;
+        }
+        if (cur.length >= t.length) return cur;
+        const remaining = t.length - cur.length;
+        const step = Math.max(2, Math.ceil(remaining / 30));
+        return t.slice(0, cur.length + step);
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [streaming]);
+
+  return displayed;
+}
 
 interface AssistantResponseProps {
   message: ChatMessage;
@@ -25,6 +62,8 @@ export function AssistantResponse({ message, chatMode, onSelect, onFeedback, onA
   const answerText = message.structuredAnswer?.answer;
   // Only show the final answer in the main chat — thinking/partial text goes to the sidebar
   const displayText = answerText || streamingContent || (!isStreaming ? message.content : undefined);
+  const typed = useTypewriter(displayText ?? "", isStreaming);
+  const renderedText = isStreaming ? typed : displayText;
 
   if (isStreaming && !displayText) {
     // Show a thinking indicator while the agent is working
@@ -86,7 +125,7 @@ export function AssistantResponse({ message, chatMode, onSelect, onFeedback, onA
           onClick={onSelect}
           className="rounded-2xl rounded-bl-sm bg-[#EEF7F4] border border-[#00B67A] text-text-primary px-4 py-3 text-sm leading-relaxed text-left cursor-pointer select-text hover:brightness-[0.98] prose prose-sm max-w-none prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-headings:my-2 prose-headings:text-[1em] prose-headings:font-bold prose-strong:text-text-primary"
         >
-          <Markdown>{displayText}</Markdown>
+          <Markdown>{renderedText}</Markdown>
           {isStreaming && (
             <span className="inline-block w-0.5 h-4 bg-[#00B67A]/60 ml-0.5 align-text-bottom timeline-dot-active" />
           )}
