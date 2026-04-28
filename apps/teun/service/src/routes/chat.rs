@@ -309,6 +309,7 @@ async fn chat(
 
     // Clone for SSE injection before persist task moves the original
     let assistant_msg_id_sse = assistant_msg_id.clone();
+    let client_session_id_sse = req.session_id.clone();
 
     // Spawn a task to persist the session after the stream completes
     let sessions = state.sessions.clone();
@@ -325,19 +326,21 @@ async fn chat(
             return;
         }
 
-        // Extract session_id from Result event, fall back to client-provided ID,
-        // then generate a new one so conversations are never silently lost.
-        let session_id = events
-            .iter()
-            .find_map(|e| {
-                if let ChatEvent::Result { session_id, .. } = e {
-                    if !session_id.is_empty() {
-                        return Some(session_id.clone());
+        // Prefer the client-provided session id so follow-ups extend the same
+        // session record. Inline mode's Result event contains a per-request
+        // Anthropic message id, not a stable conversation id, so falling back
+        // to it would fork a new session each turn.
+        let session_id = existing_session_id
+            .or_else(|| {
+                events.iter().find_map(|e| {
+                    if let ChatEvent::Result { session_id, .. } = e {
+                        if !session_id.is_empty() {
+                            return Some(session_id.clone());
+                        }
                     }
-                }
-                None
+                    None
+                })
             })
-            .or(existing_session_id)
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         // Build title from user message (first 80 chars)
@@ -440,13 +443,19 @@ async fn chat(
         };
 
         // Inject message_id into Result events so the frontend can use it
-        // for feedback API calls without requiring a page refresh.
+        // for feedback API calls without requiring a page refresh. Echo the
+        // client's session id when one was provided so follow-ups don't flip
+        // the URL — inline mode's Result session_id is a per-request msg id.
         let data = if let ChatEvent::Result { structured_output, session_id } = &event {
+            let sid = client_session_id_sse
+                .clone()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| session_id.clone());
             serde_json::json!({
                 "type": "result",
                 "data": {
                     "structured_output": structured_output,
-                    "session_id": session_id,
+                    "session_id": sid,
                     "message_id": assistant_msg_id_sse,
                 }
             }).to_string()

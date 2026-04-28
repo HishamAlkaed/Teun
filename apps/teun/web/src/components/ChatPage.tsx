@@ -45,6 +45,9 @@ export function ChatPage() {
   useEffect(() => {
     if (isLoadingSessionRef.current) return;
     if (chat.sessionId && chat.sessionId !== urlSessionId) {
+      // Mark this URL as ours so Effect 1 doesn't reload mid-stream when
+      // the URL flips to a freshly-assigned session id.
+      urlSessionLoaded.current = chat.sessionId;
       navigate(`/chat/${chat.sessionId}`, { replace: true });
     } else if (!chat.sessionId && urlSessionId) {
       navigate("/chat", { replace: true });
