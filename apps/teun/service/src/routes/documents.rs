@@ -104,20 +104,32 @@ async fn get_document(
     let total_lines = lines.len();
 
     // Parse optional line range for context
-    let (highlight_start, highlight_end) = query
+    let (parsed_start, parsed_end) = query
         .line_range
         .as_deref()
         .map(parse_line_range)
         .unwrap_or((None, None));
 
-    // If a line range is requested, return a window around it (±20 lines for context)
-    // plus the full content for search. The frontend can use this to scroll to the right spot.
+    // Clamp to document bounds. If the requested start is past the end (e.g. stale
+    // citation against a shorter, replaced document), drop the highlight so the
+    // frontend can show a fallback instead of an empty yellow strip.
+    let out_of_bounds = matches!(parsed_start, Some(s) if s > total_lines);
+    let (highlight_start, highlight_end) = if out_of_bounds {
+        (None, None)
+    } else {
+        (
+            parsed_start.map(|s| s.max(1)),
+            parsed_end.map(|e| e.min(total_lines)),
+        )
+    };
+
     let response = serde_json::json!({
         "filename": filename,
         "total_lines": total_lines,
         "content": content,
         "highlight_start": highlight_start,
         "highlight_end": highlight_end,
+        "highlight_out_of_bounds": out_of_bounds,
     });
 
     (StatusCode::OK, Json(response)).into_response()
