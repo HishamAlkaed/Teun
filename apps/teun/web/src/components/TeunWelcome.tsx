@@ -123,7 +123,7 @@ export function TeunWelcome({ onSend }: TeunWelcomeProps) {
               De woning van de klant is houtskeletbouw uit 1987. Voldoet dit aan de acceptatievoorwaarden voor een hypotheek?
             </div>
             <div className="animate-msg-in self-start max-w-[85%] px-4 py-3 text-sm leading-[1.55] rounded-xl rounded-bl bg-text-primary text-white/[0.92]" style={{ animationDelay: "1.2s" }}>
-              Nee, een woning met houtskeletbouw uit 1987 voldoet <strong className="text-accent font-semibold">NIET</strong> aan de acceptatievoorwaarden. MUNT accepteert houten woningen niet als onderpand, behalve voor prefab, houtskeletbouw of CLT woningen die een betonnen fundering hebben en na 2012 zijn gebouwd. Omdat de woning van uw klant uit 1987 stamt, valt deze buiten de acceptabele bouwperiode.
+              Nee, een woning met houtskeletbouw uit 1987 voldoet <strong className="text-accent font-semibold">NIET</strong> aan de acceptatievoorwaarden. MUNT accepteert houten woningen niet als onderpand, behalve voor prefab, houtskeletbouw of CLT woningen die een betonnen fundering hebben en na 2012 zijn gebouwd. Omdat de woning van je klant uit 1987 stamt, valt deze buiten de acceptabele bouwperiode.
             </div>
           </div>
 
