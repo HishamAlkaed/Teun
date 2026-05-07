@@ -115,10 +115,10 @@ export function LandingPage() {
             {/* Chat body */}
             <div className="p-6 flex flex-col gap-3.5">
               <div className="animate-msg-in self-end max-w-[85%] px-4 py-3 text-sm leading-[1.55] rounded-xl rounded-br bg-bg-light text-text-primary" style={{ animationDelay: "0.8s" }}>
-                De woning van de klant is houtskeletbouw uit 1987. Voldoet dit aan de acceptatievoorwaarden voor een hypotheek?
+                Hoe hoog mag een aflossingsvrij leningdeel bij MUNT maximaal zijn?
               </div>
               <div className="animate-msg-in self-start max-w-[85%] px-4 py-3 text-sm leading-[1.55] rounded-xl rounded-bl bg-[#EEF7F4] border border-[#00B67A] text-text-primary" style={{ animationDelay: "1.2s" }}>
-                Nee, een woning met houtskeletbouw uit 1987 voldoet <strong className="text-accent font-semibold">NIET</strong> aan de acceptatievoorwaarden. MUNT accepteert houten woningen niet als onderpand, behalve voor prefab, houtskeletbouw of CLT woningen die een betonnen fundering hebben en na 2012 zijn gebouwd. Omdat de woning van uw klant uit 1987 stamt, valt deze buiten de acceptabele bouwperiode.
+                Het aflossingsvrije deel van een MUNT Hypotheek mag in totaal <strong className="text-accent font-semibold">maximaal 50%</strong> van de marktwaarde van de woning zijn. Dat geldt voor alle aflossingsvrije leningdelen samen — dus niet per leningdeel afzonderlijk.
               </div>
             </div>
 
@@ -158,9 +158,9 @@ export function LandingPage() {
               <div className="flex flex-col relative">
                 <div className="absolute left-2 top-[18px] bottom-[18px] w-[1.5px] bg-bg-light" />
                 {[
-                  { num: "1", text: 'Zoeken naar "houtskeletbouw" in acceptatiekader' },
-                  { num: "2", text: <span>Bouwjaar 1987 vergeleken met vereiste: <em className="text-accent-dark not-italic">na 2012</em></span> },
-                  { num: "3", text: "Conclusie: voldoet niet aan criteria" },
+                  { num: "1", text: 'Zoeken naar "aflossingsvrij" in productvoorwaarden' },
+                  { num: "2", text: <span>Regel gevonden in <em className="text-accent-dark not-italic">§ 1.1.4 Aflossingswijze</em></span> },
+                  { num: "3", text: "Conclusie: maximaal 50% van de marktwaarde" },
                 ].map((step, i) => (
                   <div key={i} className="flex items-start gap-2.5 text-[11.5px] text-dark-soft leading-[1.5] py-1.5 relative">
                     <span className={`shrink-0 w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] font-bold z-[1] ${i === 2 ? "bg-green-soft text-accent-dark" : "bg-bg-light text-gray"}`}>
@@ -178,12 +178,12 @@ export function LandingPage() {
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
-                  <span className="flex-1 min-w-0 truncate">MUNT_Hypotheekgids_2025-002</span>
+                  <span className="flex-1 min-w-0 truncate">MUNT_Hypotheekgids_2026-005</span>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#BBB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </div>
-                <div className="text-[10px] text-gray pl-2 mb-2">Acceptatiecriteria onderpand — r. 1996–1999</div>
+                <div className="text-[10px] text-gray pl-2 mb-2">Aflossingswijze — § 1.1.4, r. 935–937</div>
               </div>
               <div className="h-px bg-border" />
               <div className="flex items-center justify-between">

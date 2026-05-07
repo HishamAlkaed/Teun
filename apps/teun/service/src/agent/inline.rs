@@ -242,8 +242,12 @@ pub async fn run_inline(
                                             let _ = tx.send(ChatEvent::Partial { content: answer_text }).await;
                                         }
                                     } else {
-                                        // Stream text up to a safe point, leaving room for partial separator
-                                        let safe_len = full_text.len().saturating_sub(SEPARATOR.len());
+                                        // Stream text up to a safe point, leaving room for partial separator.
+                                        // Snap down to a char boundary so we never slice mid-UTF-8 sequence.
+                                        let mut safe_len = full_text.len().saturating_sub(SEPARATOR.len());
+                                        while safe_len > 0 && !full_text.is_char_boundary(safe_len) {
+                                            safe_len -= 1;
+                                        }
                                         if safe_len > last_partial_len {
                                             last_partial_len = safe_len;
                                             let _ = tx.send(ChatEvent::Partial {
