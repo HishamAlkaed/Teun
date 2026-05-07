@@ -120,7 +120,7 @@ Beoordeel op:
 1. Correctheid: Klopt het antwoord met het hypotheekbeleid?
 2. Volledigheid: Komen alle verwachte kernpunten aan bod?
 3. Bronverwijzing: Zijn de bronnen relevant en correct?
-4. Categorie: Klopt de categorie (standard vs doorverwijzen_speciale_afhandeling)?
+4. Categorie: Klopt de categorie (standard / mandaat_uitzondering / doorverwijzen_speciale_afhandeling)?
 
 Geef een score van 1-5:
 - 5: Perfect antwoord, correct en volledig
