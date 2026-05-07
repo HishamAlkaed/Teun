@@ -49,6 +49,7 @@ pub struct SourceReference {
 #[serde(rename_all = "snake_case")]
 pub enum AnswerCategory {
     Standard,
+    MandaatUitzondering,
     DoorverwijzenSpecialeAfhandeling,
 }
 

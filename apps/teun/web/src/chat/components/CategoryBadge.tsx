@@ -12,6 +12,15 @@ export function CategoryBadge({ category }: CategoryBadgeProps) {
     );
   }
 
+  if (category === "mandaat_uitzondering") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-mandaat-bg px-2 py-0.5 text-xs font-medium text-mandaat-text">
+        <span className="h-1.5 w-1.5 rounded-full bg-mandaat-text/60" />
+        Acceptanten-Mandaat
+      </span>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1 rounded-md bg-standard-bg px-2 py-0.5 text-xs font-medium text-standard-text">
       <span className="h-1.5 w-1.5 rounded-full bg-standard-text/60" />

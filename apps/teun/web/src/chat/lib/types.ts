@@ -9,7 +9,7 @@ export interface MortgageAnswer {
   answer: string;
   rationale: string;
   sources: SourceReference[];
-  category: "standard" | "doorverwijzen_speciale_afhandeling";
+  category: "standard" | "mandaat_uitzondering" | "doorverwijzen_speciale_afhandeling";
 }
 
 export type SourceVerdictStatus =
