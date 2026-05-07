@@ -88,9 +88,12 @@ export function ReasoningSidebar({ message, userQuestion }: ReasoningSidebarProp
 
   // If we have an answer, add conclusion step
   if (answer) {
-    const conclusionLabel = answer.category === "doorverwijzen_speciale_afhandeling"
-      ? "Conclusie: doorverwijzen"
-      : "Conclusie: standaard antwoord";
+    const conclusionLabel =
+      answer.category === "doorverwijzen_speciale_afhandeling"
+        ? "Conclusie: doorverwijzen"
+        : answer.category === "mandaat_uitzondering"
+          ? "Conclusie: acceptanten-mandaat"
+          : "Conclusie: standaard antwoord";
     steps.push({ label: conclusionLabel });
   }
 
