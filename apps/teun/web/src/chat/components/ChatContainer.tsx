@@ -40,7 +40,7 @@ export function ChatContainer({ messages, send, stop, isLoading, chatMode, scrub
         {messages.map((msg) => {
           if (msg.role === "system") {
             return (
-              <div key={msg.id} className="flex justify-center">
+              <div key={msg.id} id={`msg-${msg.id}`} className="flex justify-center scroll-mt-6">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-secondary">
                   {msg.content}
                 </span>
@@ -48,17 +48,22 @@ export function ChatContainer({ messages, send, stop, isLoading, chatMode, scrub
             );
           }
           if (msg.role === "user") {
-            return <UserMessage key={msg.id} message={msg} />;
+            return (
+              <div key={msg.id} id={`msg-${msg.id}`} className="scroll-mt-6">
+                <UserMessage message={msg} />
+              </div>
+            );
           }
           return (
-            <AssistantResponse
-              key={msg.id}
-              message={msg}
-              chatMode={chatMode}
-              onSelect={() => onSelectMessage?.(msg.id)}
-              onFeedback={onFeedback}
-              onAddToEval={onAddToEval ? () => onAddToEval(msg.id) : undefined}
-            />
+            <div key={msg.id} id={`msg-${msg.id}`} className="scroll-mt-6">
+              <AssistantResponse
+                message={msg}
+                chatMode={chatMode}
+                onSelect={() => onSelectMessage?.(msg.id)}
+                onFeedback={onFeedback}
+                onAddToEval={onAddToEval ? () => onAddToEval(msg.id) : undefined}
+              />
+            </div>
           );
         })}
         <div ref={bottomRef} />
