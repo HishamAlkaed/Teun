@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   type FeedbackStats,
   type RejectedMessage,
@@ -75,9 +76,11 @@ export function FeedbackTab() {
         ) : (
           <div className="space-y-3">
             {rejections.map((r, i) => (
-              <div
+              <Link
                 key={`${r.session_id}-${r.message_id}-${i}`}
-                className="bg-surface border border-border rounded-lg p-4"
+                to={`/chat/${r.session_id}#msg-${r.message_id}`}
+                title="Open gesprek bij dit bericht"
+                className="block bg-surface border border-border rounded-lg p-4 hover:border-accent hover:bg-page-bg transition-colors"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -106,7 +109,7 @@ export function FeedbackTab() {
                     {r.feedback_comment}
                   </div>
                 )}
-              </div>
+              </Link>
             ))}
           </div>
         )}

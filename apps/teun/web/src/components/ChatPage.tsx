@@ -63,6 +63,25 @@ export function ChatPage() {
     }
   }, [location.state, chat, navigate, location.pathname]);
 
+  // Jump to a specific message when the URL hash is #msg-<id>
+  // (e.g. opened from the feedback overview).
+  useEffect(() => {
+    if (!location.hash.startsWith("#msg-")) return;
+    const targetId = location.hash.slice(1);
+    const messageId = targetId.slice("msg-".length);
+    const exists = chat.messages.some((m) => m.id === messageId);
+    if (!exists) return;
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    // Defer so ChatContainer's auto-scroll-to-bottom doesn't override us.
+    const timer = window.setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setSelectedMessageId(messageId);
+      navigate(location.pathname, { replace: true });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [location.hash, location.pathname, chat.messages, navigate]);
+
   const handleScrubSent = useCallback(() => {
     chat.addSystemMessage("PII is gedetecteerd en geanonimiseerd in dit bericht.");
   }, [chat]);
