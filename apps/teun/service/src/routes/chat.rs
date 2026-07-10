@@ -14,6 +14,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use tracing::Instrument;
 
 use crate::AppState;
 use crate::agent::claude::{ClaudeConfig, run_claude};
@@ -151,7 +152,21 @@ async fn chat(
     let judge_timeout = judge_config.timeout_secs;
     let judge_retry_threshold = judge_config.retry_threshold;
     let judge_max_retries = if is_quick_search { 0 } else { judge_config.max_retries };
-    tokio::spawn(async move {
+    // One Langfuse trace per chat turn. Tagged with the app name so it can be
+    // told apart from the other apps sharing this Langfuse project. The agent
+    // and judge generation spans nest under this via `.instrument`.
+    let turn_span = tracing::info_span!(
+        "teun.chat_turn",
+        langfuse.trace.tags = "[\"teun\"]",
+        langfuse.session.id = tracing::field::Empty,
+        chat.mode = %mode,
+    );
+    if let Some(sid) = claude_session_id.as_deref() {
+        turn_span.record("langfuse.session.id", sid);
+    }
+
+    tokio::spawn(
+        async move {
         let judge_cfg = judge::JudgeConfig {
             anthropic_api_key: judge_api_key,
             judge_model,
@@ -305,7 +320,9 @@ async fn chat(
                 let _ = tx_clone.send(ChatEvent::Judge { result: judge_result }).await;
             }
         }
-    });
+        }
+        .instrument(turn_span),
+    );
 
     // Clone for SSE injection before persist task moves the original
     let assistant_msg_id_sse = assistant_msg_id.clone();
