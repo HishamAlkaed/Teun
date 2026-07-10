@@ -4,6 +4,7 @@ mod eval;
 mod judge;
 mod routes;
 mod session;
+mod telemetry;
 mod token_client;
 
 use std::net::SocketAddr;
@@ -30,12 +31,9 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
-        )
-        .init();
+    // Initialise logging (and, when LANGFUSE_ENABLED=true, OTLP export to Langfuse).
+    // Keep the provider so we can flush buffered spans on shutdown.
+    let telemetry_provider = telemetry::init();
 
     // Connect to PostgreSQL
     let database_url =
@@ -173,6 +171,13 @@ async fn main() -> anyhow::Result<()> {
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await?;
+
+    // Flush any buffered spans to Langfuse before exiting.
+    if let Some(provider) = telemetry_provider {
+        if let Err(e) = provider.shutdown() {
+            tracing::warn!(error = %e, "Failed to flush telemetry on shutdown");
+        }
+    }
 
     Ok(())
 }

@@ -70,6 +70,12 @@ pub fn find_project_root() -> Option<String> {
         gen_ai.operation.name = "claude_cli",
         gen_ai.request.model = %config.model,
         message_len = message.len(),
+        // Marks this span as an LLM generation in Langfuse; usage/cost are
+        // recorded below once the CLI reports them in its final result event.
+        langfuse.observation.type = "generation",
+        gen_ai.usage.input_tokens = tracing::field::Empty,
+        gen_ai.usage.output_tokens = tracing::field::Empty,
+        gen_ai.usage.cost = tracing::field::Empty,
     )
 )]
 pub async fn run_claude(
@@ -148,6 +154,7 @@ pub async fn run_claude(
 
     let reader = BufReader::new(stdout);
     let mut lines = reader.lines();
+    let mut cli_usage: Option<CliUsage> = None;
     let mut mortgage_answer: Option<MortgageAnswer> = None;
     let mut tool_evidence = ToolEvidence::default();
     let mut channel_alive = true;
@@ -158,6 +165,11 @@ pub async fn run_claude(
         }
 
         tracing::debug!(raw_line = %line, "Claude CLI stdout");
+
+        // Capture token usage + cost reported in the CLI's final result event.
+        if let Some(usage) = extract_cli_usage(&line) {
+            cli_usage = Some(usage);
+        }
 
         let parsed_events = parse_stream_event(&line);
         if parsed_events.is_empty() {
@@ -202,7 +214,59 @@ pub async fn run_claude(
         "Tool evidence collected"
     );
 
+    // Record token usage + cost on the span so Langfuse shows this as a
+    // priced generation.
+    if let Some(usage) = cli_usage {
+        let span = tracing::Span::current();
+        span.record("gen_ai.usage.input_tokens", usage.input_tokens);
+        span.record("gen_ai.usage.output_tokens", usage.output_tokens);
+        span.record("gen_ai.usage.cost", usage.total_cost_usd);
+        tracing::info!(
+            input_tokens = usage.input_tokens,
+            output_tokens = usage.output_tokens,
+            cost_usd = usage.total_cost_usd,
+            "Claude CLI usage reported"
+        );
+    }
+
     Ok((mortgage_answer, tool_evidence))
+}
+
+/// Token usage + cost extracted from the Claude CLI `result` stream event.
+struct CliUsage {
+    input_tokens: u64,
+    output_tokens: u64,
+    total_cost_usd: f64,
+}
+
+/// Extract usage/cost from a Claude CLI stream-json line. Only the final
+/// `result` event carries these fields; every other line returns `None`.
+fn extract_cli_usage(line: &str) -> Option<CliUsage> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    if v.get("type").and_then(|t| t.as_str()) != Some("result") {
+        return None;
+    }
+    let usage = v.get("usage");
+    // input_tokens excludes cache tokens; fold them in for a fuller picture.
+    let field = |name: &str| {
+        usage
+            .and_then(|u| u.get(name))
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0)
+    };
+    let input_tokens = field("input_tokens")
+        + field("cache_read_input_tokens")
+        + field("cache_creation_input_tokens");
+    let output_tokens = field("output_tokens");
+    let total_cost_usd = v
+        .get("total_cost_usd")
+        .and_then(|c| c.as_f64())
+        .unwrap_or(0.0);
+    Some(CliUsage {
+        input_tokens,
+        output_tokens,
+        total_cost_usd,
+    })
 }
 
 /// Extract file-access evidence from tool_use inputs.
