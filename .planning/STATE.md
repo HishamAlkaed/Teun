@@ -10,11 +10,28 @@ See: .planning/PROJECT.md (updated 2026-07-17)
 ## Current Position
 
 Phase: 1 of 3 (RAG Retrieval Core & PDF Ingestion)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-07-17 — Roadmap created (3 phases, coarse), 18/18 requirements mapped
+Plan: 0 of 4 executed (all 4 planned + checked + revised)
+Status: PAUSED — Phase 1 fully planned, ready to execute Plan 01-01
+Last activity: 2026-07-17 — Phase 1 planned (4 plans), plan-checked (PASS w/ concerns), revised, committed on branch gsd/rag-rebuild
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [░░░░░░░░░░] 0% (planning done, execution not started)
+
+## Resume Next Week (paused 2026-07-17)
+
+**Branch:** `gsd/rag-rebuild` (all planning committed; Teun default branch = `main`).
+
+**Next action:** execute Phase 1 Plan `01-01` (data layer + embeddings). Then 01-02 → 01-03 → 01-04 in order (sequential waves).
+
+**Do BEFORE executing (prereqs, user-side):**
+1. pgvector `vector` extension available on target Postgres (Plan 01-01 has a blocking checkpoint that checks `pg_available_extensions`).
+2. `OPENAI_API_KEY` set as env/App setting (embeddings).
+3. PDFium native lib bundling in Docker — LOW-confidence spike; Plan 01-02 validates `.so` load + extraction on real PDFs before 01-03 depends on it. `.md` files are fallback if extraction quality poor.
+
+**How to execute (toolchain note):** on-PATH `gsd-sdk` is `@gsd-build/sdk` v0.1.0 (run/auto/init) and LACKS the `gsd-sdk query` glue the `~/.claude/get-shit-done/` skill workflows call — so `/gsd:*` commands won't run as-scripted. Drive manually: spawn the installed `gsd-executor` agent per plan (worked fine for gsd-roadmapper/gsd-phase-researcher/gsd-planner/gsd-plan-checker), do git ops by hand.
+
+**Plans:** 01-01 data layer+embeddings (RET-01,02,ING-03) · 01-02 PDFium extract (ING-01) · 01-03 chunker+ingest+seed (RET-03,ING-02,04) · 01-04 retriever+run_rag swap, delete claude.rs (RET-04,05,06).
+
+**Seed corpus:** ingest 4 PDFs from resources/acceptatie/; skip near-duplicate `handboek_accept_versie_2026_4.pdf` (use `_definitief`).
 
 ## Performance Metrics
 
@@ -68,6 +85,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-17
-Stopped at: ROADMAP.md and STATE.md created; REQUIREMENTS.md traceability populated
-Resume file: None
+Last session: 2026-07-17 (PAUSED — resume next week)
+Stopped at: Phase 1 planned + checked + revised + committed on branch gsd/rag-rebuild. Execution not started.
+Resume file: this STATE.md — see "Resume Next Week" section above.
