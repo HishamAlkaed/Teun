@@ -20,10 +20,16 @@ anyhow = "1"
 # Logging / tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-# OpenTelemetry (exports traces to Langfuse via OTLP/HTTP)
+# OpenTelemetry (exports traces to Langfuse via OTLP/HTTP).
+# The SDK's batch span processor runs on a dedicated non-Tokio thread and drives
+# the exporter with `futures_executor::block_on`. An async HTTP client panics
+# there ("no reactor running") and every span is silently dropped, so we use the
+# BLOCKING reqwest client, which runs synchronously without a Tokio reactor.
+# Enable ONLY reqwest-blocking-client: turning on reqwest-client as well makes the
+# exporter's default-client selection compile out both branches (NoHttpClient).
 opentelemetry = "0.29"
-opentelemetry_sdk = { version = "0.29", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.29", default-features = false, features = ["http-proto", "reqwest-client", "reqwest-rustls"] }
+opentelemetry_sdk = { version = "0.29" }
+opentelemetry-otlp = { version = "0.29", default-features = false, features = ["http-proto", "reqwest-blocking-client", "reqwest-rustls"] }
 tracing-opentelemetry = "0.30"
 base64 = "0.22"
 # HTTP
