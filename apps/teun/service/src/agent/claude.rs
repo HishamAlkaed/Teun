@@ -70,6 +70,16 @@ pub fn find_project_root() -> Option<String> {
         gen_ai.operation.name = "claude_cli",
         gen_ai.request.model = %config.model,
         message_len = message.len(),
+        // Marks this span as an LLM generation in Langfuse; usage/cost are
+        // recorded below once the CLI reports them in its final result event.
+        // The CLI reports a real total_cost_usd, so we set gen_ai.usage.cost
+        // directly (Langfuse uses it as the total) rather than relying on the
+        // model price table.
+        langfuse.observation.type = "generation",
+        langfuse.observation.input = %message,
+        langfuse.observation.output = tracing::field::Empty,
+        langfuse.observation.usage_details = tracing::field::Empty,
+        gen_ai.usage.cost = tracing::field::Empty,
     )
 )]
 pub async fn run_claude(
@@ -148,6 +158,7 @@ pub async fn run_claude(
 
     let reader = BufReader::new(stdout);
     let mut lines = reader.lines();
+    let mut cli_usage: Option<CliUsage> = None;
     let mut mortgage_answer: Option<MortgageAnswer> = None;
     let mut tool_evidence = ToolEvidence::default();
     let mut channel_alive = true;
@@ -158,6 +169,11 @@ pub async fn run_claude(
         }
 
         tracing::debug!(raw_line = %line, "Claude CLI stdout");
+
+        // Capture token usage + cost reported in the CLI's final result event.
+        if let Some(usage) = extract_cli_usage(&line) {
+            cli_usage = Some(usage);
+        }
 
         let parsed_events = parse_stream_event(&line);
         if parsed_events.is_empty() {
@@ -202,7 +218,73 @@ pub async fn run_claude(
         "Tool evidence collected"
     );
 
+    // Record token usage + cost + output on the span so Langfuse shows this as
+    // a priced generation. The CLI reports a real total_cost_usd, so we set the
+    // cost directly; usage_details keeps cache tokens broken out for display.
+    if let Some(usage) = cli_usage {
+        let span = tracing::Span::current();
+        let usage_details = serde_json::json!({
+            "input": usage.input_tokens,
+            "cache_read_input_tokens": usage.cache_read_tokens,
+            "cache_creation_input_tokens": usage.cache_creation_tokens,
+            "output": usage.output_tokens,
+        })
+        .to_string();
+        span.record("langfuse.observation.usage_details", usage_details.as_str());
+        span.record("gen_ai.usage.cost", usage.total_cost_usd);
+        tracing::info!(
+            input_tokens = usage.input_tokens,
+            cache_read_tokens = usage.cache_read_tokens,
+            cache_creation_tokens = usage.cache_creation_tokens,
+            output_tokens = usage.output_tokens,
+            cost_usd = usage.total_cost_usd,
+            "Claude CLI usage reported"
+        );
+    }
+    if let Some(ref answer) = mortgage_answer {
+        tracing::Span::current().record("langfuse.observation.output", answer.answer.as_str());
+    }
+
     Ok((mortgage_answer, tool_evidence))
+}
+
+/// Token usage + cost extracted from the Claude CLI `result` stream event.
+struct CliUsage {
+    /// Fresh (non-cached) input tokens, priced at the full input rate.
+    input_tokens: u64,
+    cache_read_tokens: u64,
+    cache_creation_tokens: u64,
+    output_tokens: u64,
+    total_cost_usd: f64,
+}
+
+/// Extract usage/cost from a Claude CLI stream-json line. Only the final
+/// `result` event carries these fields; every other line returns `None`.
+fn extract_cli_usage(line: &str) -> Option<CliUsage> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    if v.get("type").and_then(|t| t.as_str()) != Some("result") {
+        return None;
+    }
+    let usage = v.get("usage");
+    // Keep cache tokens in separate buckets so Langfuse can price cache reads
+    // (~0.1x) and cache writes (~1.25x) at their own rates.
+    let field = |name: &str| {
+        usage
+            .and_then(|u| u.get(name))
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0)
+    };
+    let total_cost_usd = v
+        .get("total_cost_usd")
+        .and_then(|c| c.as_f64())
+        .unwrap_or(0.0);
+    Some(CliUsage {
+        input_tokens: field("input_tokens"),
+        cache_read_tokens: field("cache_read_input_tokens"),
+        cache_creation_tokens: field("cache_creation_input_tokens"),
+        output_tokens: field("output_tokens"),
+        total_cost_usd,
+    })
 }
 
 /// Extract file-access evidence from tool_use inputs.

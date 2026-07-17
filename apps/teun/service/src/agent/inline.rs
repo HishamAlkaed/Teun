@@ -127,6 +127,14 @@ fn load_inline_documents(resources_dir: &str) -> Result<String> {
         gen_ai.operation.name = "messages_api",
         gen_ai.request.model = %config.model,
         message_len = message.len(),
+        // Langfuse: mark as a priced generation and expose the user question as
+        // the observation input. Output + token usage are recorded after the
+        // stream completes (below). usage_details breaks out cache tokens so
+        // Langfuse can price them at their reduced/creation rates.
+        langfuse.observation.type = "generation",
+        langfuse.observation.input = %message,
+        langfuse.observation.output = tracing::field::Empty,
+        langfuse.observation.usage_details = tracing::field::Empty,
     )
 )]
 pub async fn run_inline(
@@ -201,6 +209,13 @@ pub async fn run_inline(
     let mut last_partial_len = 0usize;
     let mut separator_found = false;
 
+    // Token usage for Langfuse cost tracking. Anthropic reports input + cache
+    // tokens on `message_start` and the final output token count on `message_delta`.
+    let mut usage_input: u64 = 0;
+    let mut usage_cache_read: u64 = 0;
+    let mut usage_cache_creation: u64 = 0;
+    let mut usage_output: u64 = 0;
+
     use futures::StreamExt;
     let mut buffer = String::new();
 
@@ -227,6 +242,19 @@ pub async fn run_inline(
                         Some("message_start") => {
                             if let Some(id) = event["message"]["id"].as_str() {
                                 session_id = id.to_string();
+                            }
+                            let usage = &event["message"]["usage"];
+                            usage_input = usage["input_tokens"].as_u64().unwrap_or(0);
+                            usage_cache_read =
+                                usage["cache_read_input_tokens"].as_u64().unwrap_or(0);
+                            usage_cache_creation =
+                                usage["cache_creation_input_tokens"].as_u64().unwrap_or(0);
+                            usage_output = usage["output_tokens"].as_u64().unwrap_or(0);
+                        }
+                        Some("message_delta") => {
+                            // Final cumulative output token count arrives here.
+                            if let Some(o) = event["usage"]["output_tokens"].as_u64() {
+                                usage_output = o;
                             }
                         }
                         Some("content_block_delta") => {
@@ -275,6 +303,31 @@ pub async fn run_inline(
 
     // Parse structured output from the two-phase response
     let mortgage_answer = parse_two_phase_response(&full_text);
+
+    // Record token usage + output on the generation span so Langfuse can price
+    // the call and the evaluators have an output to score. Keep cache tokens in
+    // separate keys so Langfuse applies the correct cache-read / cache-write rate.
+    let span = tracing::Span::current();
+    let usage_details = serde_json::json!({
+        "input": usage_input,
+        "cache_read_input_tokens": usage_cache_read,
+        "cache_creation_input_tokens": usage_cache_creation,
+        "output": usage_output,
+    })
+    .to_string();
+    span.record("langfuse.observation.usage_details", usage_details.as_str());
+    let output_text = mortgage_answer
+        .as_ref()
+        .map(|a| a.answer.clone())
+        .unwrap_or_else(|| full_text.trim().to_string());
+    span.record("langfuse.observation.output", output_text.as_str());
+    tracing::info!(
+        input_tokens = usage_input,
+        cache_read_tokens = usage_cache_read,
+        cache_creation_tokens = usage_cache_creation,
+        output_tokens = usage_output,
+        "Inline Messages API usage reported"
+    );
 
     let structured_output = if let Some(ref answer) = mortgage_answer {
         serde_json::to_value(answer).unwrap_or_else(|_| serde_json::json!({ "answer": &full_text }))

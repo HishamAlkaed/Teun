@@ -17,6 +17,11 @@ pub struct LlmVerdict {
         gen_ai.system = "anthropic",
         gen_ai.operation.name = "faithfulness_judge",
         gen_ai.request.model = %model,
+        // Priced generation in Langfuse; cost is derived from model + usage_details.
+        langfuse.observation.type = "generation",
+        langfuse.observation.input = tracing::field::Empty,
+        langfuse.observation.output = tracing::field::Empty,
+        langfuse.observation.usage_details = tracing::field::Empty,
     )
 )]
 pub async fn call_faithfulness_judge(
@@ -53,6 +58,9 @@ pub async fn call_faithfulness_judge(
         .replace("{sources}", &sources_text)
         .replace("{category}", category.trim_matches('"'));
 
+    // Expose the full judge prompt as the Langfuse observation input.
+    tracing::Span::current().record("langfuse.observation.input", prompt.as_str());
+
     let body = serde_json::json!({
         "model": model,
         "max_tokens": 512,
@@ -77,9 +85,26 @@ pub async fn call_faithfulness_judge(
 
     let resp_json: serde_json::Value = resp.json().await.context("Failed to parse response")?;
 
+    // Record token usage (with cache breakdown) so Langfuse prices this generation.
+    if let Some(usage) = resp_json.get("usage") {
+        let u = |name: &str| usage.get(name).and_then(|n| n.as_u64()).unwrap_or(0);
+        let usage_details = serde_json::json!({
+            "input": u("input_tokens"),
+            "cache_read_input_tokens": u("cache_read_input_tokens"),
+            "cache_creation_input_tokens": u("cache_creation_input_tokens"),
+            "output": u("output_tokens"),
+        })
+        .to_string();
+        tracing::Span::current()
+            .record("langfuse.observation.usage_details", usage_details.as_str());
+    }
+
     let text = resp_json["content"][0]["text"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("No text in Anthropic response"))?;
+
+    // Record the verdict as the Langfuse observation output.
+    tracing::Span::current().record("langfuse.observation.output", text);
 
     parse_verdict(text)
 }
