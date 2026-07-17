@@ -155,10 +155,16 @@ async fn chat(
     // One Langfuse trace per chat turn. Tagged with the app name so it can be
     // told apart from the other apps sharing this Langfuse project. The agent
     // and judge generation spans nest under this via `.instrument`.
+    // trace.input is the adviser's raw question; trace.output is the final
+    // structured answer (recorded once the pipeline produces it). These are the
+    // fields the Langfuse evaluators (answer relevance, faithfulness,
+    // hallucination, context relevance) read at the trace level.
     let turn_span = tracing::info_span!(
         "teun.chat_turn",
         langfuse.trace.tags = "[\"teun\"]",
         langfuse.session.id = tracing::field::Empty,
+        langfuse.trace.input = %user_message,
+        langfuse.trace.output = tracing::field::Empty,
         chat.mode = %mode,
     );
     if let Some(sid) = claude_session_id.as_deref() {
@@ -204,6 +210,9 @@ async fn chat(
 
             match inline_result {
                 Ok(Some(answer)) => {
+                    if let Ok(js) = serde_json::to_string(&answer) {
+                        tracing::Span::current().record("langfuse.trace.output", js.as_str());
+                    }
                     tracing::info!("Inline mode — running judge (no retries)");
                     let no_evidence = ToolEvidence::default();
                     let judge_result =
@@ -255,6 +264,9 @@ async fn chat(
 
                 match result {
                     Ok((Some(answer), tool_evidence)) => {
+                        if let Ok(js) = serde_json::to_string(&answer) {
+                            tracing::Span::current().record("langfuse.trace.output", js.as_str());
+                        }
                         tracing::info!(attempt, "Running judge");
                         let judge_result =
                             judge::run_judge(&http_client, &judge_cfg, &agent_message, &answer, &tool_evidence).await;
