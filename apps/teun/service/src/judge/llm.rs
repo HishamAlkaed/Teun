@@ -17,6 +17,10 @@ pub struct LlmVerdict {
         gen_ai.system = "anthropic",
         gen_ai.operation.name = "faithfulness_judge",
         gen_ai.request.model = %model,
+        // Priced generation in Langfuse; cost is derived from model + tokens.
+        langfuse.observation.type = "generation",
+        gen_ai.usage.input_tokens = tracing::field::Empty,
+        gen_ai.usage.output_tokens = tracing::field::Empty,
     )
 )]
 pub async fn call_faithfulness_judge(
@@ -76,6 +80,17 @@ pub async fn call_faithfulness_judge(
     }
 
     let resp_json: serde_json::Value = resp.json().await.context("Failed to parse response")?;
+
+    // Record token usage so Langfuse prices this generation.
+    if let Some(usage) = resp_json.get("usage") {
+        let span = tracing::Span::current();
+        if let Some(input) = usage.get("input_tokens").and_then(|n| n.as_u64()) {
+            span.record("gen_ai.usage.input_tokens", input);
+        }
+        if let Some(output) = usage.get("output_tokens").and_then(|n| n.as_u64()) {
+            span.record("gen_ai.usage.output_tokens", output);
+        }
+    }
 
     let text = resp_json["content"][0]["text"]
         .as_str()
