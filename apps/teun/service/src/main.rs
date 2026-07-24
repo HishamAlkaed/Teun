@@ -2,6 +2,7 @@ mod agent;
 mod error;
 mod eval;
 mod judge;
+mod rag;
 mod routes;
 mod session;
 mod telemetry;
