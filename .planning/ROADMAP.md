@@ -63,4 +63,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. RAG Retrieval Core & PDF Ingestion | 4/4 | Complete (E2E checkpoint passed) | 2026-07-24 |
 | 2. Admin Document Management (Web) | 2/2 | Plans complete (02-01 backend + 02-02 frontend done); orchestrator live smoke/E2E verification pending | - |
-| 3. Citation Integrity & Interface Preservation | 0/TBD | Not started | - |
+| 3. Citation Integrity & Interface Preservation | 1/1 | Plans complete (03-01 DB-backed viewer endpoints + regression evidence); orchestrator live E2E re-check pending | - |

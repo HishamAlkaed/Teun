@@ -31,9 +31,9 @@
 
 ### Citation Integrity (interface preservation)
 
-- [ ] **CIT-01**: `verifier.rs` verifies each source's literal quote + line_range against the stored extracted text of PDF-sourced documents
-- [ ] **CIT-02**: DocumentViewer renders a PDF-sourced document's extracted text with the correct line highlight for a citation
-- [ ] **CIT-03**: SSE `ChatEvent` stream and `MortgageAnswer`/`SourceReference` shapes are unchanged; existing frontend, judge, eval, and sessions work without modification
+- [x] **CIT-01**: `verifier.rs` verifies each source's literal quote + line_range against the stored extracted text of PDF-sourced documents
+- [x] **CIT-02**: DocumentViewer renders a PDF-sourced document's extracted text with the correct line highlight for a citation
+- [x] **CIT-03**: SSE `ChatEvent` stream and `MortgageAnswer`/`SourceReference` shapes are unchanged; existing frontend, judge, eval, and sessions work without modification
 
 ## v2 Requirements
 
@@ -78,9 +78,9 @@
 | ADM-03 | Phase 2 | Complete (02-01) |
 | ADM-04 | Phase 2 | Complete (02-02) |
 | ADM-05 | Phase 2 | Complete (02-01) |
-| CIT-01 | Phase 3 | Pending |
-| CIT-02 | Phase 3 | Pending |
-| CIT-03 | Phase 3 | Pending |
+| CIT-01 | Phase 3 | Complete (06fe9d6, Phase-1 pull-forward; verified 03-01) |
+| CIT-02 | Phase 3 | Complete (03-01) |
+| CIT-03 | Phase 3 | Complete (03-01 regression evidence; orchestrator live E2E re-check pending) |
 
 **Coverage:**
 - v1 requirements: 18 total
