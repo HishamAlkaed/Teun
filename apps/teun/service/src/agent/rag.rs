@@ -54,7 +54,7 @@ impl RagConfig {
             std::env::var(var).ok().filter(|v| !v.trim().is_empty())
         })?;
 
-        let project_root = super::claude::find_project_root().unwrap_or_else(|| ".".to_string());
+        let project_root = super::find_project_root().unwrap_or_else(|| ".".to_string());
         let skill_path = std::env::var("SKILL_PATH").unwrap_or_else(|_| {
             // Container: /app/config/acceptatie-beleid.md
             // Local dev: {root}/apps/teun/service/config/acceptatie-beleid.md
@@ -499,5 +499,64 @@ mod tests {
         assert_eq!(body["messages"][0]["content"], "SYSTEM");
         assert_eq!(body["messages"][1]["role"], "user");
         assert_eq!(body["messages"][1]["content"], "vraag");
+    }
+
+    /// Live end-to-end RAG answer smoke test: embeds a real question,
+    /// retrieves from the seeded corpus and runs the full generation call
+    /// with whatever LLM_PROVIDER is configured. Gated on TEUN_SMOKE_QUERY
+    /// (+ DATABASE_URL, embeddings credentials and generation credentials).
+    /// Run with --nocapture to see the answer/sources/evidence. Prints answer
+    /// content and metadata only — never keys or the full prompt.
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, embeddings + generation credentials and TEUN_SMOKE_QUERY"]
+    async fn live_rag_answer_smoke() {
+        let question = std::env::var("TEUN_SMOKE_QUERY").expect("set TEUN_SMOKE_QUERY");
+        let url = std::env::var("DATABASE_URL").expect("set DATABASE_URL");
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&url)
+            .await
+            .expect("connect to database");
+        let store = RagStore::new(pool);
+        let embed_cfg = EmbedConfig::from_env().expect("embed config");
+        let config = RagConfig::from_env().expect("rag config");
+        let client = reqwest::Client::new();
+
+        let (tx, mut rx) = mpsc::channel::<ChatEvent>(64);
+        let drain = tokio::spawn(async move {
+            let mut events: Vec<ChatEvent> = Vec::new();
+            while let Some(event) = rx.recv().await {
+                events.push(event);
+            }
+            events
+        });
+
+        println!("provider: {} / model: {}", config.system(), config.model_name());
+        let (answer, evidence) = run_rag(&client, &store, &embed_cfg, &config, &question, tx)
+            .await
+            .expect("run_rag");
+        let events = drain.await.expect("drain events");
+
+        let partials = events.iter().filter(|e| matches!(e, ChatEvent::Partial { .. })).count();
+        let results = events.iter().filter(|e| matches!(e, ChatEvent::Result { .. })).count();
+        println!("events: {partials} partial, {results} result");
+        assert!(partials >= 1, "expected at least one Partial event");
+        assert_eq!(results, 1, "expected exactly one Result event");
+
+        let answer = answer.expect("two-phase MortgageAnswer parsed");
+        println!("question: {question}");
+        println!("answer:\n{}\n", answer.answer);
+        println!("category: {:?}", answer.category);
+        for source in &answer.sources {
+            println!(
+                "source: {} [{}] lines={:?} quote={:?}",
+                source.document, source.section, source.line_range, source.quote
+            );
+        }
+        println!("evidence ranges: {:?}", evidence.accessed_ranges);
+        assert!(
+            !evidence.accessed_ranges.is_empty(),
+            "evidence must be assembled from retrieved chunks"
+        );
     }
 }

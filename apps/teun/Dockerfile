@@ -47,14 +47,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgcc-s1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js (required for claude CLI)
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install claude CLI globally
-RUN npm install -g @anthropic-ai/claude-code
-
 WORKDIR /app
 
 # PDFium native library for pdfium-render (dynamic binding at /app/libpdfium.so).
@@ -77,9 +69,6 @@ COPY resources/ /app/resources/
 
 RUN useradd -m -s /bin/bash app
 USER app
-
-# Credentials mounted at runtime via docker-compose
-# ~/.claude/.credentials.json
 
 ENV PORT=3000
 ENV STATIC_DIR=/app/dist
