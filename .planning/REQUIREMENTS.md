@@ -26,7 +26,7 @@
 - [x] **ADM-01**: Admin can upload one or more PDFs via a web endpoint (multipart) with MIME-type and size validation, behind existing portal auth
 - [x] **ADM-02**: Admin can list ingested documents with their status, chunk count, and size (DB-backed)
 - [x] **ADM-03**: Admin can delete a document, removing its chunks, stored bytes, and metadata row
-- [ ] **ADM-04**: Web admin has a document-manager tab (upload / list / delete / status), replacing the current static "Documentatie" help placeholder (help content preserved)
+- [x] **ADM-04**: Web admin has a document-manager tab (upload / list / delete / status), replacing the current static "Documentatie" help placeholder (help content preserved)
 - [x] **ADM-05**: Backend serves the original PDF bytes for a document (inline) so a citation `[N]`/source can open the source
 
 ### Citation Integrity (interface preservation)
@@ -76,7 +76,7 @@
 | ADM-01 | Phase 2 | Complete (02-01) |
 | ADM-02 | Phase 2 | Complete (02-01) |
 | ADM-03 | Phase 2 | Complete (02-01) |
-| ADM-04 | Phase 2 | Pending |
+| ADM-04 | Phase 2 | Complete (02-02) |
 | ADM-05 | Phase 2 | Complete (02-01) |
 | CIT-01 | Phase 3 | Pending |
 | CIT-02 | Phase 3 | Pending |
@@ -89,4 +89,4 @@
 
 ---
 *Requirements defined: 2026-07-17*
-*Last updated: 2026-07-17 after roadmap creation*
+*Last updated: 2026-07-24 after Plan 02-02 (frontend document-manager tab)*
