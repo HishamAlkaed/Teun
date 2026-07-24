@@ -4,7 +4,9 @@
 //! - `store`: `documents`/`chunks` CRUD over sqlx (no top-K query yet — Plan 04)
 //! - `embed`: OpenAI/Azure `text-embedding-3-large` client (batch + single)
 //! - `extract`: pdfium extraction → line-numbered canonical body + page map
+//! - `chunk`: token-aware chunking with line/page metadata
 
+pub mod chunk;
 pub mod embed;
 pub mod extract;
 pub mod store;
