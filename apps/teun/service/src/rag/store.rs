@@ -36,6 +36,24 @@ pub struct Chunk {
     pub page: i32,
 }
 
+/// A row in `documents` for the admin list view (ADM-02): metadata only —
+/// the raw `original_bytes` payload is never loaded, its size is computed
+/// in SQL via `octet_length`.
+#[derive(Debug, Clone)]
+pub struct DocumentListItem {
+    pub id: String,
+    pub filename: String,
+    /// pending | indexing | indexed | error
+    pub status: String,
+    pub chunk_count: i32,
+    pub page_count: i32,
+    /// Size of the stored original PDF (`octet_length(original_bytes)`).
+    pub size_bytes: i64,
+    pub error_message: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub indexed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 /// A chunk returned by the top-K similarity search, carrying everything the
 /// answer path needs: prompt content, citation metadata (document filename +
 /// canonical line range) and the page for display.
@@ -226,6 +244,57 @@ impl RagStore {
                 page: r.get("page"),
             })
             .collect())
+    }
+
+    /// List all documents for the admin view (ADM-02), newest first. The raw
+    /// PDF payload is never fetched; its size comes from `octet_length`.
+    pub async fn list_documents(&self) -> Result<Vec<DocumentListItem>> {
+        let rows = sqlx::query(
+            "SELECT id, filename, status, chunk_count, page_count, \
+                    octet_length(original_bytes)::BIGINT AS size_bytes, \
+                    error_message, created_at, indexed_at \
+             FROM documents ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to list documents")?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| DocumentListItem {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                status: r.get("status"),
+                chunk_count: r.get("chunk_count"),
+                page_count: r.get("page_count"),
+                size_bytes: r.get("size_bytes"),
+                error_message: r.get("error_message"),
+                created_at: r.get("created_at"),
+                indexed_at: r.get("indexed_at"),
+            })
+            .collect())
+    }
+
+    /// Delete a document by id (ADM-03). Its chunks go with it via the
+    /// `ON DELETE CASCADE` foreign key. Returns whether a row was deleted.
+    pub async fn delete_document(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM documents WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete document")?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Fetch the stored original PDF bytes by filename (ADM-05, inline
+    /// serving). `None` when no document with that filename exists.
+    pub async fn get_pdf_bytes(&self, filename: &str) -> Result<Option<Vec<u8>>> {
+        let row = sqlx::query("SELECT original_bytes FROM documents WHERE filename = $1")
+            .bind(filename)
+            .fetch_optional(&self.pool)
+            .await
+            .context("Failed to get pdf bytes")?;
+        Ok(row.map(|r| r.get("original_bytes")))
     }
 
     pub async fn count_chunks(&self, document_id: &str) -> Result<i64> {
@@ -473,6 +542,138 @@ mod tests {
             .expect("drop scratch database");
 
         assert!(result.is_empty(), "empty chunks table must yield an empty Vec");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a pgvector-enabled Postgres via DATABASE_URL"]
+    async fn list_documents_returns_metadata_newest_first() {
+        let store = test_store().await;
+        let pdf_old = b"%PDF-1.7 oude bytes".to_vec();
+        let pdf_new = b"%PDF-1.7 nieuwe upload met meer bytes".to_vec();
+        let name_old = format!("test-list-old-{}.pdf", uuid::Uuid::new_v4());
+        let name_new = format!("test-list-new-{}.pdf", uuid::Uuid::new_v4());
+
+        let id_old = store
+            .insert_document(&name_old, &pdf_old, "body oud", 2)
+            .await
+            .expect("insert old document");
+        // Deterministic ordering: push the first document one day into the past
+        // (two autocommit inserts can land on near-identical timestamps).
+        sqlx::query("UPDATE documents SET created_at = now() - interval '1 day' WHERE id = $1")
+            .bind(&id_old)
+            .execute(&store.pool)
+            .await
+            .expect("backdate old document");
+        let id_new = store
+            .insert_document(&name_new, &pdf_new, "body nieuw", 5)
+            .await
+            .expect("insert new document");
+
+        let list = store.list_documents().await.expect("list_documents");
+
+        let item_new = list
+            .iter()
+            .find(|d| d.id == id_new)
+            .expect("new document listed");
+        assert_eq!(item_new.filename, name_new);
+        assert_eq!(item_new.status, "pending");
+        assert_eq!(item_new.chunk_count, 0);
+        assert_eq!(item_new.page_count, 5);
+        assert_eq!(item_new.size_bytes, pdf_new.len() as i64);
+        assert!(item_new.error_message.is_none());
+        assert!(item_new.indexed_at.is_none());
+
+        // Newest first: the fresh document must appear before the backdated one.
+        let pos_new = list.iter().position(|d| d.id == id_new).unwrap();
+        let pos_old = list.iter().position(|d| d.id == id_old).unwrap();
+        assert!(pos_new < pos_old, "list must be ordered created_at DESC");
+        assert_eq!(
+            list.iter().find(|d| d.id == id_old).unwrap().size_bytes,
+            pdf_old.len() as i64
+        );
+
+        // Cleanup.
+        for id in [&id_old, &id_new] {
+            sqlx::query("DELETE FROM documents WHERE id = $1")
+                .bind(id)
+                .execute(&store.pool)
+                .await
+                .expect("cleanup");
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a pgvector-enabled Postgres via DATABASE_URL"]
+    async fn delete_document_cascades_chunks() {
+        let store = test_store().await;
+        let filename = format!("test-delete-{}.pdf", uuid::Uuid::new_v4());
+        let doc_id = store
+            .insert_document(&filename, b"%PDF-1.7 dummy", "body", 1)
+            .await
+            .expect("insert_document");
+        let chunks: Vec<(Chunk, Vec<f32>)> = (0..2)
+            .map(|i| {
+                (
+                    Chunk {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        document_id: doc_id.clone(),
+                        content: format!("chunk {i}"),
+                        line_start: i + 1,
+                        line_end: i + 1,
+                        page: 1,
+                    },
+                    dummy_embedding(i as f32),
+                )
+            })
+            .collect();
+        store.insert_chunks(&chunks).await.expect("insert_chunks");
+        assert_eq!(store.count_chunks(&doc_id).await.expect("count"), 2);
+
+        // Delete removes the row; chunks go via ON DELETE CASCADE.
+        let deleted = store.delete_document(&doc_id).await.expect("delete_document");
+        assert!(deleted, "existing document must report deleted=true");
+        assert!(store
+            .get_document(&doc_id)
+            .await
+            .expect("get_document")
+            .is_none());
+        assert_eq!(store.count_chunks(&doc_id).await.expect("count"), 0);
+
+        // Deleting an unknown id reports false (route maps this to 404).
+        let again = store.delete_document(&doc_id).await.expect("re-delete");
+        assert!(!again);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a pgvector-enabled Postgres via DATABASE_URL"]
+    async fn get_pdf_bytes_round_trip_and_unknown() {
+        let store = test_store().await;
+        let filename = format!("test-pdf-{}.pdf", uuid::Uuid::new_v4());
+        let pdf = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF".to_vec();
+        let doc_id = store
+            .insert_document(&filename, &pdf, "body", 1)
+            .await
+            .expect("insert_document");
+
+        let bytes = store
+            .get_pdf_bytes(&filename)
+            .await
+            .expect("get_pdf_bytes")
+            .expect("stored document has bytes");
+        assert_eq!(bytes, pdf, "returned bytes must equal the stored original");
+
+        let unknown = store
+            .get_pdf_bytes("nope-does-not-exist.pdf")
+            .await
+            .expect("get_pdf_bytes unknown");
+        assert!(unknown.is_none());
+
+        // Cleanup.
+        sqlx::query("DELETE FROM documents WHERE id = $1")
+            .bind(&doc_id)
+            .execute(&store.pool)
+            .await
+            .expect("cleanup");
     }
 
     /// Live end-to-end retrieval smoke test: embeds a real question via the
