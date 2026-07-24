@@ -3,6 +3,7 @@ pub mod types;
 pub mod verifier;
 
 use crate::agent::types::{MortgageAnswer, ToolEvidence};
+use crate::rag::store::RagStore;
 use types::{JudgeResult, SourceStatus};
 
 pub struct JudgeConfig {
@@ -59,18 +60,23 @@ fn find_resources_dir() -> String {
 /// Run both judge phases: programmatic source verification, then LLM faithfulness check.
 #[tracing::instrument(
     name = "ai.judge_pipeline",
-    skip(client, config, answer),
+    skip(client, config, store, answer),
     fields(gen_ai.operation.name = "judge")
 )]
 pub async fn run_judge(
     client: &reqwest::Client,
     config: &JudgeConfig,
+    store: Option<&RagStore>,
     question: &str,
     answer: &MortgageAnswer,
     tool_evidence: &ToolEvidence,
 ) -> JudgeResult {
-    // Phase 1: programmatic source verification (using tool evidence for line ranges)
-    let source_verdicts = verifier::verify_sources(&config.resources_dir, &answer.sources, tool_evidence).await;
+    // Phase 1: programmatic source verification against the canonical
+    // extracted body in Postgres (disk fallback), using chunk-derived
+    // evidence for line ranges.
+    let source_verdicts =
+        verifier::verify_sources(store, &config.resources_dir, &answer.sources, tool_evidence)
+            .await;
 
     let sources_total = source_verdicts.len() as u8;
     let sources_verified = source_verdicts

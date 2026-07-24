@@ -218,7 +218,7 @@ async fn chat(
                 // chunk-derived evidence returned by run_rag — never
                 // ToolEvidence::default().
                 let judge_result =
-                    judge::run_judge(&http_client, &judge_cfg, &message, &answer, &evidence).await;
+                    judge::run_judge(&http_client, &judge_cfg, Some(&rag_store), &message, &answer, &evidence).await;
                 tracing::info!(
                     score = judge_result.score,
                     sources_verified = judge_result.sources_verified,

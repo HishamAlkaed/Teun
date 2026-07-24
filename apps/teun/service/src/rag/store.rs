@@ -169,6 +169,18 @@ impl RagStore {
         Ok(())
     }
 
+    /// Fetch the canonical (PDF-extracted) body for a document by filename.
+    /// The judge verifier matches cited quotes/line ranges against this text,
+    /// since chunk line numbers refer to it rather than to any file on disk.
+    pub async fn get_extracted_text(&self, filename: &str) -> Result<Option<String>> {
+        let row = sqlx::query("SELECT extracted_text FROM documents WHERE filename = $1")
+            .bind(filename)
+            .fetch_optional(&self.pool)
+            .await
+            .context("Failed to get extracted_text")?;
+        Ok(row.map(|r| r.get("extracted_text")))
+    }
+
     pub async fn get_document(&self, id: &str) -> Result<Option<Document>> {
         let row = sqlx::query(
             "SELECT id, filename, extracted_text, page_count, status, chunk_count \

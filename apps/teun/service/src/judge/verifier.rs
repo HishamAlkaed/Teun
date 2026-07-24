@@ -1,46 +1,85 @@
+use std::collections::HashMap;
+
 use super::types::{SourceStatus, SourceVerdict};
 use crate::agent::types::{SourceReference, ToolEvidence};
+use crate::rag::store::RagStore;
 
 /// Verify all sources from a structured answer against the actual policy documents.
-/// Uses tool evidence (from Read/Grep calls) to determine precise line ranges.
+/// Uses tool evidence (from retrieved chunk ranges) to determine precise line ranges.
+///
+/// Cited line numbers refer to `documents.extracted_text` (the canonical
+/// PDF-extracted body chunks were cut from), so when a `store` is given the
+/// text is loaded from Postgres by filename. Reading `{resources_dir}/{file}`
+/// from disk remains as fallback for documents not present in the DB.
 #[tracing::instrument(
     name = "judge.verify_sources",
-    skip(sources, tool_evidence),
+    skip(store, sources, tool_evidence),
     fields(source_count = sources.len())
 )]
 pub async fn verify_sources(
+    store: Option<&RagStore>,
     resources_dir: &str,
     sources: &[SourceReference],
     tool_evidence: &ToolEvidence,
 ) -> Vec<SourceVerdict> {
+    // Fetch each cited document's canonical body once, not per source.
+    let mut db_texts: HashMap<String, Option<String>> = HashMap::new();
+    if let Some(store) = store {
+        for source in sources {
+            if db_texts.contains_key(&source.document) || !is_safe_document_name(&source.document)
+            {
+                continue;
+            }
+            let text = match store.get_extracted_text(&source.document).await {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::warn!(document = %source.document, error = %format!("{e:#}"),
+                        "Failed to load extracted_text; falling back to disk");
+                    None
+                }
+            };
+            db_texts.insert(source.document.clone(), text);
+        }
+    }
+
     let mut verdicts = Vec::with_capacity(sources.len());
     for source in sources {
         let dir = resources_dir.to_string();
         let src = source.clone();
+        let db_text = db_texts.get(&source.document).cloned().flatten();
         // Look up tool evidence for this document
         let evidence_ranges = tool_evidence
             .accessed_ranges
             .get(&source.document)
             .cloned()
             .unwrap_or_default();
-        let verdict = tokio::task::spawn_blocking(move || check_source(&dir, &src, &evidence_ranges))
-            .await
-            .unwrap_or_else(|_| SourceVerdict {
-                document: source.document.clone(),
-                section: source.section.clone(),
-                line_range: source.line_range.clone(),
-                status: SourceStatus::DocumentNotFound,
-                detail: Some("Internal error during verification".to_string()),
-            });
+        let verdict =
+            tokio::task::spawn_blocking(move || check_source(&dir, db_text, &src, &evidence_ranges))
+                .await
+                .unwrap_or_else(|_| SourceVerdict {
+                    document: source.document.clone(),
+                    section: source.section.clone(),
+                    line_range: source.line_range.clone(),
+                    status: SourceStatus::DocumentNotFound,
+                    detail: Some("Internal error during verification".to_string()),
+                });
         verdicts.push(verdict);
     }
     verdicts
 }
 
+/// Path traversal guard: reject document names with path separators or parent refs.
+fn is_safe_document_name(name: &str) -> bool {
+    !(name.contains('/') || name.contains('\\') || name.contains(".."))
+}
+
 /// Check a single source against the actual document.
-/// `evidence_ranges` are the (start, end) line ranges the agent actually Read/Grep'd.
+/// `db_text` is the canonical extracted body from Postgres when available;
+/// otherwise the document is read from `{resources_dir}/{document}` on disk.
+/// `evidence_ranges` are the (start, end) line ranges of the retrieved chunks.
 fn check_source(
     resources_dir: &str,
+    db_text: Option<String>,
     source: &SourceReference,
     evidence_ranges: &[(usize, usize)],
 ) -> SourceVerdict {
@@ -53,10 +92,7 @@ fn check_source(
     };
 
     // Path traversal guard: reject document names with path separators or parent refs
-    if source.document.contains('/')
-        || source.document.contains('\\')
-        || source.document.contains("..")
-    {
+    if !is_safe_document_name(&source.document) {
         return SourceVerdict {
             status: SourceStatus::DocumentNotFound,
             detail: Some("Invalid document name".to_string()),
@@ -64,16 +100,20 @@ fn check_source(
         };
     }
 
-    let doc_path = format!("{}/{}", resources_dir, source.document);
-
-    let content = match std::fs::read_to_string(&doc_path) {
-        Ok(c) => c,
-        Err(_) => {
-            return SourceVerdict {
-                status: SourceStatus::DocumentNotFound,
-                detail: Some(format!("Document not found: {}", source.document)),
-                ..base
-            };
+    let content = match db_text {
+        Some(text) => text,
+        None => {
+            let doc_path = format!("{}/{}", resources_dir, source.document);
+            match std::fs::read_to_string(&doc_path) {
+                Ok(c) => c,
+                Err(_) => {
+                    return SourceVerdict {
+                        status: SourceStatus::DocumentNotFound,
+                        detail: Some(format!("Document not found: {}", source.document)),
+                        ..base
+                    };
+                }
+            }
         }
     };
 
@@ -416,7 +456,7 @@ mod tests {
             quote: None,
             line_range: None,
         };
-        let verdict = check_source("/tmp", &source, &[]);
+        let verdict = check_source("/tmp", None, &source, &[]);
         assert!(matches!(verdict.status, SourceStatus::DocumentNotFound));
     }
 
@@ -428,7 +468,7 @@ mod tests {
             quote: None,
             line_range: None,
         };
-        let verdict = check_source("/tmp", &source, &[]);
+        let verdict = check_source("/tmp", None, &source, &[]);
         assert!(matches!(verdict.status, SourceStatus::DocumentNotFound));
     }
 }
