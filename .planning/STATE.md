@@ -24,7 +24,7 @@ Progress: [░░░░░░░░░░] 0% (planning done, execution not star
 
 **Do BEFORE executing (prereqs, user-side):**
 1. pgvector `vector` extension available on target Postgres (Plan 01-01 has a blocking checkpoint that checks `pg_available_extensions`).
-2. `OPENAI_API_KEY` set as env/App setting (embeddings).
+2. Azure OpenAI embeddings vars set as NextEpoch App settings: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT=text-embedding-3-large`, `AZURE_OPENAI_API_VERSION=2024-02-01`. (Provided; key never committed.)
 3. PDFium native lib bundling in Docker — LOW-confidence spike; Plan 01-02 validates `.so` load + extraction on real PDFs before 01-03 depends on it. `.md` files are fallback if extraction quality poor.
 
 **How to execute (toolchain note):** on-PATH `gsd-sdk` is `@gsd-build/sdk` v0.1.0 (run/auto/init) and LACKS the `gsd-sdk query` glue the `~/.claude/get-shit-done/` skill workflows call — so `/gsd:*` commands won't run as-scripted. Drive manually: spawn the installed `gsd-executor` agent per plan (worked fine for gsd-roadmapper/gsd-phase-researcher/gsd-planner/gsd-plan-checker), do git ops by hand.
@@ -60,7 +60,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
 - Vector store = pgvector (reuse existing sqlx + Postgres)
-- Embeddings = OpenAI `text-embedding-3-small` (cross-provider from the Anthropic answer model)
+- Embeddings = Azure OpenAI `text-embedding-3-large`, native 3072-dim (deployment `text-embedding-3-large`, api-version 2024-02-01, endpoint dmfco-ai-tools-resource). pgvector column `VECTOR(3072)`. Plain OpenAI = fallback only. App deployed on NextEpoch; Azure is outbound embeddings API only. Key lives in NextEpoch App settings, never committed.
 - PDF extraction = pdfium-render (PDFium native lib must be bundled in Docker)
 - Citations = line-based over extracted text (store line-numbered canonical body; tag chunks with page)
 - PDF bytes stored in Postgres `bytea`; `mode` field (tools/inline) collapses to one RAG answer path
@@ -85,6 +85,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-17 (PAUSED — resume next week)
-Stopped at: Phase 1 planned + checked + revised + committed on branch gsd/rag-rebuild. Execution not started.
+Last session: 2026-07-24 (handoff — user continues from NextEpoch platform editor)
+Stopped at: Phase 1 planned; plans reconciled to Azure OpenAI text-embedding-3-large @ 3072 dims (native). Seed PDFs committed to resources/acceptatie/. Execution not started — next action: execute Plan 01-01.
 Resume file: this STATE.md — see "Resume Next Week" section above.
+Embedding env vars (values live in NextEpoch App settings, key NEVER in repo): AZURE_OPENAI_ENDPOINT=https://dmfco-ai-tools-resource.cognitiveservices.azure.com/ · AZURE_OPENAI_DEPLOYMENT=text-embedding-3-large · AZURE_OPENAI_API_VERSION=2024-02-01 · AZURE_OPENAI_API_KEY=<set in App settings>.

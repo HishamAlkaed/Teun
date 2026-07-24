@@ -86,7 +86,7 @@ CC's QAAgent ↔ Teun's judge: same idea (post-answer quality gate + retry). Teu
 
 Teun needs the retrieval half CC has and Teun lacks. Teun's corpus is 4 static docs (no scraping/scheduler needed — ingestion is far simpler than CC's).
 
-**Recommended (fits existing stack): pgvector.** Teun already uses `sqlx` + Postgres. Add pgvector extension instead of a new store (LanceDB/Azure). Rust: `sqlx` + `pgvector` crate; embeddings via reqwest (Anthropic has none — use OpenAI `text-embedding-3-small`, or Voyage, or a local model). Decision needed: which embedding provider.
+**Recommended (fits existing stack): pgvector.** Teun already uses `sqlx` + Postgres. Add pgvector extension instead of a new store (LanceDB/Azure). Rust: `sqlx` + `pgvector` crate; embeddings via reqwest (Anthropic has none — use OpenAI `text-embedding-3-large`, or Voyage, or a local model). Decision needed: which embedding provider.
 
 **New pieces:**
 1. **Ingest step** (offline/startup binary): chunk the 4 MUNT `.md` files (preserve source filename + **line ranges per chunk** so citations still resolve — critical for `verifier.rs`), embed, store in pgvector.
@@ -125,7 +125,7 @@ Teun needs the retrieval half CC has and Teun lacks. Teun's corpus is 4 static d
 
 ### Decisions locked (2026-07-17)
 - **Vector store:** pgvector (reuse sqlx+postgres).
-- **Embeddings:** OpenAI `text-embedding-3-small`.
+- **Embeddings:** OpenAI `text-embedding-3-large`.
 - **`mode` field:** repoint tools/inline → single RAG path.
 - **PDF extraction:** `pdfium-render` (bundle PDFium native lib in Docker).
 - **Citations:** line-based over extracted text — extract PDF→text, store line-numbered body as canonical document so `verifier.rs` + `DocumentViewer` + quote/line_range keep working; tag chunks with page.

@@ -8,7 +8,7 @@
 ### Retrieval (RAG core)
 
 - [ ] **RET-01**: pgvector extension enabled and schema created (documents + chunks-with-embedding tables) via sqlx migration
-- [ ] **RET-02**: Embedding client calls OpenAI `text-embedding-3-small` (batch + single query) over reqwest, keyed by env/App setting
+- [ ] **RET-02**: Embedding client calls OpenAI `text-embedding-3-large` (batch + single query) over reqwest, keyed by env/App setting
 - [ ] **RET-03**: Chunker splits a document's text into chunks, each tagged with `document`, `line_start`, `line_end`, and source `page`
 - [ ] **RET-04**: Retriever embeds a user query and returns the top-K most similar chunks from pgvector
 - [ ] **RET-05**: New answer path builds the prompt from top-K retrieved chunks and makes a single Anthropic Messages call, emitting the existing two-phase `MortgageAnswer`

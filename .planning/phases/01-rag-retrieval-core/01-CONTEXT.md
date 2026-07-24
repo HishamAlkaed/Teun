@@ -21,7 +21,7 @@ while keeping the `MortgageAnswer` output shape byte-identical.
 |----|---------|------|
 | RET-01 | pgvector extension + `documents`/`chunks` schema via sqlx migration | 01 |
 | ING-03 | Original PDF bytes stored in Postgres `bytea` | 01 |
-| RET-02 | OpenAI `text-embedding-3-small` embedding client over reqwest (batch + single) | 01 |
+| RET-02 | OpenAI `text-embedding-3-large` embedding client over reqwest (batch + single) | 01 |
 | ING-01 | pdfium-render extraction → line-numbered canonical body + line→page map | 02 |
 | RET-03 | Chunker tags each chunk `{document, line_start, line_end, page}` | 03 |
 | ING-02 | Ingest pipeline extract→chunk→embed→store with status + chunk_count | 03 |
@@ -34,7 +34,7 @@ while keeping the `MortgageAnswer` output shape byte-identical.
 
 - **Vector store:** pgvector on the existing sqlx + Postgres. No new external service. No ANN index at this corpus size (flat scan).
 - **Crates (pinned by research):** `pdfium-render 0.9`, `pgvector 0.4` (feature `sqlx`), `tiktoken-rs 0.12`, `text-splitter 0.32` (feature `tiktoken-rs`). All four passed the Package Legitimacy Audit (crates.io, source-backed) — no install checkpoint required.
-- **Embeddings:** OpenAI `text-embedding-3-small` (1536 dims) via `reqwest`. Azure OpenAI is an accepted variant behind env branch.
+- **Embeddings:** OpenAI `text-embedding-3-large` (3072 dims) via `reqwest`. Azure OpenAI is an accepted variant behind env branch.
 - **PDF extraction:** `pdfium-render`; bundle the PDFium native `.so` (pinned bblanchon release + checksum) into the Docker image.
 - **Migrations:** the existing embedded `sqlx::migrate!("./migrations")` + runtime `sqlx::query()` pattern. NO `sqlx::query!` compile-time macros (no build-time DB). New file `003_rag.sql`; `CREATE EXTENSION IF NOT EXISTS vector` is its first statement.
 - **PDF bytes:** Postgres `bytea` (no Azure blob).

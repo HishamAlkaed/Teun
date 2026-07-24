@@ -28,7 +28,7 @@ Teun answers a mortgage-acceptance question with a grounded, source-cited answer
 
 **Retrieval (RAG core — the cost fix)**
 - [ ] pgvector store + schema (documents + chunks with embedding vectors)
-- [ ] OpenAI `text-embedding-3-small` embedding client (via reqwest)
+- [ ] OpenAI `text-embedding-3-large` embedding client (via reqwest)
 - [ ] Chunker producing chunks tagged with `{document, line_start, line_end, page}`
 - [ ] Retriever: embed query → top-K similarity search over chunks
 - [ ] New answer path: prompt built from top-K chunks → single Anthropic Messages call → `MortgageAnswer` (replaces `run_claude` subprocess + `run_inline` whole-corpus dump)
@@ -73,7 +73,7 @@ Teun answers a mortgage-acceptance question with a grounded, source-cited answer
 - **Tech stack**: Rust — axum 0.8, tokio, sqlx(Postgres), reqwest, `pdfium-render`, `pgvector`. Frontend React+Vite+TS. — Must stay within existing stack.
 - **Interface compatibility**: SSE `ChatEvent` contract + `MortgageAnswer`/`SourceReference` + existing REST endpoints MUST stay backward-compatible — the shipped web frontend, judge, eval, and sessions depend on them.
 - **Native dependency**: `pdfium-render` needs the PDFium native library bundled into the Docker image.
-- **Embeddings provider**: OpenAI `text-embedding-3-small` — requires an OpenAI (or Azure OpenAI) API key as an env/App setting; cross-provider from the Anthropic answer model.
+- **Embeddings provider**: OpenAI `text-embedding-3-large` — requires an OpenAI (or Azure OpenAI) API key as an env/App setting; cross-provider from the Anthropic answer model.
 - **Postgres + pgvector**: the `vector` extension must be enabled via migration before the app serves traffic.
 - **Security**: admin upload/delete must sit behind the existing portal auth (`AUTH_USERNAME`/`AUTH_PASSWORD`); PDF path/filename handling must keep the existing path-traversal guards.
 
@@ -82,7 +82,7 @@ Teun answers a mortgage-acceptance question with a grounded, source-cited answer
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Vector store = pgvector | Reuse existing sqlx + Postgres; no new external service | — Pending |
-| Embeddings = OpenAI text-embedding-3-small | Same as reference (CC); cheap, strong, simple REST | — Pending |
+| Embeddings = OpenAI text-embedding-3-large | Same as reference (CC); cheap, strong, simple REST | — Pending |
 | `mode` field → single RAG path | One cheap backend; keep field only for frontend compat | — Pending |
 | PDF extraction = pdfium-render | Best text/layout fidelity in Rust for complex policy PDFs | — Pending |
 | Citations = line-based over extracted text | Keeps `verifier.rs` + DocumentViewer + quote/line_range working unchanged; tag chunks with page | — Pending |

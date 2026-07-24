@@ -8,7 +8,7 @@
 
 Phase 1 replaces Teun's two expensive answer paths (`run_claude` CLI subprocess and `run_inline` whole-corpus dump) with a real retrieval pipeline: PDFs are ingested (extract → line-number → chunk → embed → store in pgvector), and each query embeds → top-K cosine search → single Anthropic Messages call producing the same two-phase `MortgageAnswer`. Every core dependency already fits the existing stack: `pgvector` rides on the current `sqlx 0.8 + Postgres`, embeddings go through the existing `reqwest` client, and the answer path reuses `inline.rs`'s proven SSE streaming + two-phase parser almost verbatim.
 
-The four verified building blocks are: `pdfium-render 0.9.3` (per-page text via `page.text()?.all()`), `pgvector 0.4.2` (crate feature `sqlx`, supports sqlx ≥ 0.8, `Vector` type binds/decodes directly, cosine via the `<=>` operator), `tiktoken-rs 0.12.0` + `text-splitter 0.32.0` (token-aware chunking with byte-offset indices to recover line/page metadata), and OpenAI's `text-embedding-3-small` (1536 dims, batched `input` array). Migrations follow the existing embedded-`sqlx::migrate!("./migrations")` numbered-SQL pattern — add `003_*.sql` creating the `vector` extension plus `documents`/`chunks` tables.
+The four verified building blocks are: `pdfium-render 0.9.3` (per-page text via `page.text()?.all()`), `pgvector 0.4.2` (crate feature `sqlx`, supports sqlx ≥ 0.8, `Vector` type binds/decodes directly, cosine via the `<=>` operator), `tiktoken-rs 0.12.0` + `text-splitter 0.32.0` (token-aware chunking with byte-offset indices to recover line/page metadata), and OpenAI's `text-embedding-3-large` (3072 dims, batched `input` array). Migrations follow the existing embedded-`sqlx::migrate!("./migrations")` numbered-SQL pattern — add `003_*.sql` creating the `vector` extension plus `documents`/`chunks` tables.
 
 **Primary recommendation:** Add a new `agent/rag.rs` that mirrors `inline.rs` (reuse its streaming loop + `parse_two_phase_response`), build the system prompt from top-K retrieved chunks formatted with the existing `"<line>: text"` convention, populate `ToolEvidence` from the retrieved chunks' line ranges so the judge/verifier narrow-search path keeps working, delete `claude.rs` wholesale, and repoint both `mode=tools`/`mode=inline` at `run_rag`. The one genuine unknown is bundling the PDFium native library into the `debian:bookworm-slim` runtime image — spike this first.
 
@@ -17,7 +17,7 @@ The four verified building blocks are: `pdfium-render 0.9.3` (per-page text via 
 
 ### Locked Decisions (do NOT reconsider)
 - **Vector store:** pgvector — reuse existing sqlx + Postgres, no new external service.
-- **Embeddings:** OpenAI `text-embedding-3-small` via `reqwest` (Azure OpenAI acceptable variant).
+- **Embeddings:** OpenAI `text-embedding-3-large` via `reqwest` (Azure OpenAI acceptable variant).
 - **PDF extraction:** `pdfium-render` — bundle the PDFium native library into the Docker image.
 - **Citations:** line-based over extracted text. On ingest, convert each PDF → line-numbered canonical text body used by `verifier.rs` + DocumentViewer; chunks additionally carry the source `page`.
 - **PDF byte storage:** Postgres `bytea` (no Azure blob).
@@ -51,7 +51,7 @@ The four verified building blocks are: `pdfium-render 0.9.3` (per-page text via 
 | ID | Inferred Description | Research Support |
 |----|-------------|------------------|
 | RET-01 | pgvector store + schema (`documents` + `chunks` with embedding vectors) | § pgvector + sqlx; § Migrations; migration `003_*.sql` sketch |
-| RET-02 | OpenAI `text-embedding-3-small` embedding client via reqwest | § OpenAI Embeddings; request/response + env config |
+| RET-02 | OpenAI `text-embedding-3-large` embedding client via reqwest | § OpenAI Embeddings; request/response + env config |
 | RET-03 | Chunker producing chunks tagged with `{document, line_start, line_end, page}` | § Chunking in Rust; byte-offset → line/page mapping |
 | RET-04 | Retriever: embed query → top-K cosine similarity search | § pgvector query (`<=>`); top-K SQL |
 | RET-05 | New single-call Anthropic answer path → `MortgageAnswer` | § Answer Path Integration; reuse `inline.rs` |
@@ -147,17 +147,17 @@ INGEST (once for seed corpus; Phase 2 wires the upload endpoint)
   text-splitter (tiktoken cl100k_base) → chunks + byte-offset indices
         │  map byte offset → line_start/line_end → page
         ▼
-  OpenAI /v1/embeddings (batched input[])  ──► Vec<[f32;1536]>
+  OpenAI /v1/embeddings (batched input[])  ──► Vec<[f32;3072]>
         │
         ▼
   Postgres:  documents(bytea, extracted_text, page_count, status, chunk_count)
-             chunks(document_id, content, line_start, line_end, page, embedding vector(1536))
+             chunks(document_id, content, line_start, line_end, page, embedding vector(3072))
 
 QUERY (per chat turn — replaces run_claude & run_inline)
   POST /api/teun/chat {message, mode, ...}
         │
         ▼
-  embed(query) → [f32;1536]
+  embed(query) → [f32;3072]
         │
         ▼
   SELECT ... ORDER BY embedding <=> $1 LIMIT K   (cosine)
@@ -249,7 +249,7 @@ for (byte_off, chunk) in splitter.chunk_indices(&canonical.text) {
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
 | Token-aware chunking | Manual token windowing | `text-splitter` + `tiktoken-rs` | Handles UTF-8 boundaries, overlap, semantic splits, and returns byte indices |
-| Token counting | Char/word heuristics | `tiktoken-rs` `cl100k_base` | `text-embedding-3-small` uses cl100k BPE; heuristics drift from real token limits |
+| Token counting | Char/word heuristics | `tiktoken-rs` `cl100k_base` | `text-embedding-3-large` uses cl100k BPE; heuristics drift from real token limits |
 | Vector encode/decode for Postgres | Serialize floats to text | `pgvector::Vector` + `sqlx` feature | Correct binary wire format, `<=>`/`<->`/`<#>` operators, no manual parsing |
 | PDF text extraction | Byte-level PDF parsing | `pdfium-render` | PDF is a layout format; text order, encodings, and fonts are non-trivial (locked decision anyway) |
 | Similarity ranking | Cosine in Rust over all rows | pgvector `ORDER BY embedding <=> $1 LIMIT K` | Push the ANN/scan to the DB; single round-trip |
@@ -302,9 +302,9 @@ Add `apt-get install -y libstdc++6` (and verify `libgcc-s1`). **Pin the pdfium-b
 **Warning signs:** `SourceStatus::QuoteMismatch` on every PDF-sourced citation.
 **Confidence:** MEDIUM (codebase-verified behavior).
 
-### Pitfall 4: `text-embedding-3-small` dimension / batch limits
+### Pitfall 4: `text-embedding-3-large` dimension / batch limits
 **What goes wrong:** Column declared `vector(N)` with the wrong N; or a batch exceeds OpenAI's per-request token cap.
-**How to avoid:** `text-embedding-3-small` returns **1536** dims by default → `embedding vector(1536)`. Batch the `input` array but cap batch token totals (OpenAI limit ~300k tokens / ≤2048 inputs per request); chunk the batches accordingly. `[CITED: platform.openai.com/docs/guides/embeddings]`
+**How to avoid:** `text-embedding-3-large` returns **3072** dims by default → `embedding vector(3072)`. Batch the `input` array but cap batch token totals (OpenAI limit ~300k tokens / ≤2048 inputs per request); chunk the batches accordingly. `[CITED: platform.openai.com/docs/guides/embeddings]`
 **Confidence:** HIGH.
 
 ### Pitfall 5: pgvector extension must exist before any vector query
@@ -319,10 +319,10 @@ Add `apt-get install -y libstdc++6` (and verify `libgcc-s1`). **Pin the pdfium-b
 // Source: platform.openai.com/docs/api-reference/embeddings  [CITED]
 // POST https://api.openai.com/v1/embeddings
 // Headers: Authorization: Bearer $OPENAI_API_KEY ; Content-Type: application/json
-{ "model": "text-embedding-3-small", "input": ["chunk 1 text", "chunk 2 text"] }
+{ "model": "text-embedding-3-large", "input": ["chunk 1 text", "chunk 2 text"] }
 // Response:
-{ "data": [ { "index": 0, "embedding": [0.0012, ...1536 floats] }, { "index": 1, "embedding": [...] } ],
-  "model": "text-embedding-3-small", "usage": { "prompt_tokens": 42, "total_tokens": 42 } }
+{ "data": [ { "index": 0, "embedding": [0.0012, ...3072 floats] }, { "index": 1, "embedding": [...] } ],
+  "model": "text-embedding-3-large", "usage": { "prompt_tokens": 42, "total_tokens": 42 } }
 ```
 Azure variant `[CITED: learn.microsoft.com/azure/ai-services/openai]`:
 `POST {AZURE_OPENAI_ENDPOINT}/openai/deployments/{deployment}/embeddings?api-version=2024-02-01`, header `api-key: {key}`, same body without `model`.
@@ -376,7 +376,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     line_start  INTEGER NOT NULL,
     line_end    INTEGER NOT NULL,
     page        INTEGER NOT NULL,
-    embedding   VECTOR(1536) NOT NULL
+    embedding   VECTOR(3072) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks (document_id);
 -- No ANN index for Phase 1: flat scan is faster at this corpus size (pgvector README).
@@ -401,7 +401,7 @@ CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks (document_id);
 | A3 | `pdfium-render 0.9.3` API is `document.pages().iter()` + `page.text()?.all()` with `.lines()` iteration | Extraction | Exact iterator/borrow signatures may differ; verify on docs.rs |
 | A4 | PDFium binaries from bblanchon are compatible with pdfium-render 0.9.3 and load on bookworm-slim with `libstdc++6` | Docker pitfall | **Build/runtime failure — spike required** |
 | A5 | The target Postgres deployment has the pgvector server extension installed/available | Migrations pitfall | `CREATE EXTENSION` fails → need pgvector-enabled PG image |
-| A6 | `text-embedding-3-small` default output dimension is 1536 | Embeddings | Wrong `vector(N)` → insert errors (well-documented, low risk) |
+| A6 | `text-embedding-3-large` default output dimension is 3072 | Embeddings | Wrong `vector(N)` → insert errors (well-documented, low risk) |
 | A7 | Reusing `inline.rs` streaming + `parse_two_phase_response` keeps the SSE contract byte-identical | Answer path | Frontend/eval regressions if drift; mitigated by reusing code verbatim |
 | A8 | Phase 1 may leave PDF-source citation verification degraded (deferred to Phase 3) without violating success criteria | Verifier gap | If Phase 1 must show verified sources, needs the (A) DB-read verifier change now |
 
