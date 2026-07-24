@@ -132,7 +132,7 @@ export function DocumentManager() {
           Nog geen documenten geüpload
         </div>
       ) : (
-        <div className="bg-surface border border-border rounded-lg overflow-hidden">
+        <div className="bg-surface border border-border rounded-lg overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border-light">
@@ -162,7 +162,7 @@ export function DocumentManager() {
             <tbody>
               {documents.map((doc) => (
                 <tr key={doc.id} className="border-b border-border-light last:border-0">
-                  <td className="px-4 py-3 text-xs text-text-primary align-top">
+                  <td className="px-4 py-3 text-xs text-text-primary align-top break-all">
                     <a
                       href={`/api/teun/documents/${encodeURIComponent(doc.filename)}/pdf`}
                       target="_blank"
