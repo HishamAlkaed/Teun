@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
@@ -23,42 +24,82 @@ pub fn router() -> Router<Arc<AppState>> {
 }
 
 async fn list_documents(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let resources_dir = &state.judge_config.resources_dir;
+    // DB-first (CIT-02): the indexed documents ARE the corpus citations point
+    // at — their `extracted_text` is what chunk line numbers refer to. The
+    // resources-dir .md listing is kept as a merge fallback for legacy files
+    // not (yet) in the DB (transition safety).
+    let store = RagStore::new(state.pool.clone());
 
-    let entries = match std::fs::read_dir(resources_dir) {
-        Ok(dir) => dir,
+    let mut docs: Vec<serde_json::Value> = Vec::new();
+    let mut db_names: HashSet<String> = HashSet::new();
+
+    let db_ok = match store.list_documents().await {
+        Ok(items) => {
+            for item in items.into_iter().filter(|d| d.status == "indexed") {
+                // line_count must match the total_lines the content endpoint
+                // reports, i.e. count lines of the canonical extracted text.
+                let line_count = match store.get_extracted_text(&item.filename).await {
+                    Ok(Some(text)) => text.lines().count(),
+                    _ => 0,
+                };
+                db_names.insert(item.filename.clone());
+                docs.push(serde_json::json!({
+                    "filename": item.filename,
+                    "size_bytes": item.size_bytes,
+                    "line_count": line_count,
+                }));
+            }
+            true
+        }
         Err(e) => {
-            tracing::error!(error = %e, dir = %resources_dir, "Failed to read resources dir");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": "Kon documenten niet ophalen" })),
-            );
+            tracing::error!(error = format!("{e:#}"), "Failed to list documents from DB");
+            false
         }
     };
 
-    let mut docs: Vec<serde_json::Value> = entries
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map(|ext| ext == "md")
-                .unwrap_or(false)
-        })
-        .filter_map(|e| {
-            let path = e.path();
-            let filename = path.file_name()?.to_string_lossy().to_string();
-            let metadata = std::fs::metadata(&path).ok()?;
-            let line_count = std::fs::read_to_string(&path)
-                .ok()
-                .map(|c| c.lines().count())
-                .unwrap_or(0);
-            Some(serde_json::json!({
-                "filename": filename,
-                "size_bytes": metadata.len(),
-                "line_count": line_count,
-            }))
-        })
-        .collect();
+    let resources_dir = &state.judge_config.resources_dir;
+    let disk_ok = match std::fs::read_dir(resources_dir) {
+        Ok(entries) => {
+            let disk_docs = entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .map(|ext| ext == "md")
+                        .unwrap_or(false)
+                })
+                .filter_map(|e| {
+                    let path = e.path();
+                    let filename = path.file_name()?.to_string_lossy().to_string();
+                    if db_names.contains(&filename) {
+                        return None;
+                    }
+                    let metadata = std::fs::metadata(&path).ok()?;
+                    let line_count = std::fs::read_to_string(&path)
+                        .ok()
+                        .map(|c| c.lines().count())
+                        .unwrap_or(0);
+                    Some(serde_json::json!({
+                        "filename": filename,
+                        "size_bytes": metadata.len(),
+                        "line_count": line_count,
+                    }))
+                });
+            docs.extend(disk_docs);
+            true
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, dir = %resources_dir, "Resources dir not readable for document list fallback");
+            false
+        }
+    };
+
+    if !db_ok && !disk_ok {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": "Kon documenten niet ophalen" })),
+        );
+    }
 
     docs.sort_by(|a, b| {
         a["filename"]
@@ -91,17 +132,35 @@ async fn get_document(
             .into_response();
     }
 
-    let resources_dir = &state.judge_config.resources_dir;
-    let doc_path = format!("{}/{}", resources_dir, filename);
+    // DB-first (CIT-02): serve the canonical `extracted_text` — the text the
+    // chunk line numbers (and thus citations) refer to. Disk read stays as the
+    // fallback for legacy .md files that aren't in the DB. A pending row that
+    // hasn't been ingested yet has an empty extracted_text; treat it as absent
+    // so it falls through to disk/404 instead of rendering an empty document.
+    let store = RagStore::new(state.pool.clone());
+    let db_text = match store.get_extracted_text(&filename).await {
+        Ok(text) => text.filter(|t| !t.is_empty()),
+        Err(e) => {
+            tracing::error!(error = format!("{e:#}"), "Failed to get extracted_text; falling back to disk");
+            None
+        }
+    };
 
-    let content = match std::fs::read_to_string(&doc_path) {
-        Ok(c) => c,
-        Err(_) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({ "error": "Document niet gevonden" })),
-            )
-                .into_response();
+    let (content, content_type) = match db_text {
+        Some(text) => (text, "pdf_text"),
+        None => {
+            let resources_dir = &state.judge_config.resources_dir;
+            let doc_path = format!("{}/{}", resources_dir, filename);
+            match std::fs::read_to_string(&doc_path) {
+                Ok(c) => (c, "markdown"),
+                Err(_) => {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        Json(serde_json::json!({ "error": "Document niet gevonden" })),
+                    )
+                        .into_response();
+                }
+            }
         }
     };
 
@@ -128,6 +187,9 @@ async fn get_document(
         )
     };
 
+    // Shape-preserving (CIT-03): identical fields as before, with ONE additive
+    // field (`content_type`) signalling the source so the viewer can pick a
+    // sensible default view mode ("pdf_text" = extracted PDF text, not markdown).
     let response = serde_json::json!({
         "filename": filename,
         "total_lines": total_lines,
@@ -135,6 +197,7 @@ async fn get_document(
         "highlight_start": highlight_start,
         "highlight_end": highlight_end,
         "highlight_out_of_bounds": out_of_bounds,
+        "content_type": content_type,
     });
 
     (StatusCode::OK, Json(response)).into_response()
