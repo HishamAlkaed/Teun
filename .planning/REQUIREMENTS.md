@@ -10,9 +10,9 @@
 - [ ] **RET-01**: pgvector extension enabled and schema created (documents + chunks-with-embedding tables) via sqlx migration
 - [ ] **RET-02**: Embedding client calls OpenAI `text-embedding-3-large` (batch + single query) over reqwest, keyed by env/App setting
 - [x] **RET-03**: Chunker splits a document's text into chunks, each tagged with `document`, `line_start`, `line_end`, and source `page`
-- [ ] **RET-04**: Retriever embeds a user query and returns the top-K most similar chunks from pgvector
-- [ ] **RET-05**: New answer path builds the prompt from top-K retrieved chunks and makes a single Anthropic Messages call, emitting the existing two-phase `MortgageAnswer`
-- [ ] **RET-06**: `mode` field values (tools/inline) both route to the single RAG answer path; old `run_claude` subprocess and `run_inline` whole-corpus dump are removed
+- [x] **RET-04**: Retriever embeds a user query and returns the top-K most similar chunks from pgvector
+- [x] **RET-05**: New answer path builds the prompt from top-K retrieved chunks and makes a single Anthropic Messages call, emitting the existing two-phase `MortgageAnswer`
+- [x] **RET-06**: `mode` field values (tools/inline) both route to the single RAG answer path; old `run_claude` subprocess and `run_inline` whole-corpus dump are removed
 
 ### Ingestion & PDF
 
@@ -66,9 +66,9 @@
 | RET-01 | Phase 1 | Pending |
 | RET-02 | Phase 1 | Pending |
 | RET-03 | Phase 1 | Complete (01-03) |
-| RET-04 | Phase 1 | Pending |
-| RET-05 | Phase 1 | Pending |
-| RET-06 | Phase 1 | Pending |
+| RET-04 | Phase 1 | Complete |
+| RET-05 | Phase 1 | Complete |
+| RET-06 | Phase 1 | Complete |
 | ING-01 | Phase 1 | Pending |
 | ING-02 | Phase 1 | Complete (01-03) |
 | ING-03 | Phase 1 | Pending |

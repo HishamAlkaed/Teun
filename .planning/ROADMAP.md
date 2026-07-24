@@ -61,6 +61,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. RAG Retrieval Core & PDF Ingestion | 0/TBD | Not started | - |
+| 1. RAG Retrieval Core & PDF Ingestion | 4/4 | Executed — final human-verify checkpoint pending | 2026-07-24 |
 | 2. Admin Document Management (Web) | 0/TBD | Not started | - |
 | 3. Citation Integrity & Interface Preservation | 0/TBD | Not started | - |

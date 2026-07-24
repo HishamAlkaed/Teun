@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-07-17)
 ## Current Position
 
 Phase: 1 of 3 (RAG Retrieval Core & PDF Ingestion)
-Plan: 3 of 4 executed (01-03 COMPLETE — all 3 tasks done, seed corpus live: 4 docs indexed, 210 chunks in pgvector)
-Status: READY — next execute Plan 01-04 (retriever + run_rag swap, delete claude.rs). Earlier 01-01/01-02 human checkpoints effectively satisfied by the live seed run (pgvector migration applied, Azure embeddings working, extraction quality proven in production path).
-Last activity: 2026-07-24 — Executed Plan 01-03 (chunk.rs + ingest.rs + bin/ingest); REAL seed run against teun-pg-dev with Azure embeddings: all 4 acceptatie PDFs status=indexed (58/32/79/41 chunks, 210 total), re-run idempotent (total unchanged). Commits c9583e4/79730c7/a925510/41802f8 on gsd/rag-rebuild.
+Plan: 4 of 4 executed (01-04 auto tasks COMPLETE — retriever + run_rag + provider switch + repoint + deletions; final human-verify E2E checkpoint PENDING)
+Status: CHECKPOINT — Plan 01-04's blocking checkpoint:human-verify remains (E2E chat via /api/teun/chat, judge evidence, provider flip, docker image build). Both providers were already runtime-verified via the env-gated smoke harness (anthropic claude-opus-4-6 and azure-openai gpt-5.6-luna).
+Last activity: 2026-07-24 — Executed Plan 01-04: rag::store::search (top-8, <=>), agent/stream.rs (shared two-phase SSE loop + SseDialect provider decode), agent/rag.rs (run_rag with LLM_PROVIDER=anthropic|azure-openai, chunk-derived ToolEvidence to judge), chat.rs single path (depth instruction + judge retry loop deliberately removed), claude.rs + inline.rs deleted, Dockerfile de-Node'd. Full suite 80 passed/0 failed. Commits a65efd7/7f76c61/ab218fe/f46fff7 on gsd/rag-rebuild.
 
-Progress: [███████░░░] ~70% (3 of 4 plans executed)
+Progress: [█████████░] ~95% (4 of 4 plans executed; 01-04 human checkpoint pending)
 
 ## Resume Next Week (paused 2026-07-17)
 
@@ -36,15 +36,15 @@ Progress: [███████░░░] ~70% (3 of 4 plans executed)
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3 (01-01, 01-02, 01-03)
+- Total plans completed: 4 (01-01, 01-02, 01-03, 01-04)
 - Average duration: ~30 min
-- Total execution time: ~1.5 hours
+- Total execution time: ~2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 3 (01-01: 3 tasks, 9 files · 01-02: 2 tasks, 5 files · 01-03: 3 tasks, 7 files) | ~90 min | ~30 min |
+| 01 | 4 (01-01: 3 tasks, 9 files · 01-02: 2 tasks, 5 files · 01-03: 3 tasks, 7 files · 01-04: 4 tasks, 9 files) | ~125 min | ~31 min |
 
 **Recent Trend:**
 - Last 5 plans: —
@@ -69,7 +69,10 @@ Recent decisions affecting current work:
 - Idempotent ingest lives IN ingest_document (filename upsert + delete_chunks before re-chunk) — any caller is re-run safe; verified live (210 chunks stable across re-runs)
 - Seed corpus LIVE in teun-pg-dev: 4 docs indexed (handboek_definitief 58, Beheergids 32, Hypotheekgids 79, Voorleggids 41 = 210 chunks); near-duplicate handboek skipped
 - Citations = line-based over extracted text (store line-numbered canonical body; tag chunks with page)
-- PDF bytes stored in Postgres `bytea`; `mode` field (tools/inline) collapses to one RAG answer path
+- PDF bytes stored in Postgres `bytea`; `mode` field (tools/inline) collapses to one RAG answer path — DONE in 01-04 (both modes → run_rag; claude.rs + inline.rs deleted; image de-Node'd)
+- Generation LLM switchable via LLM_PROVIDER=anthropic (default, RAG_MODEL→INLINE_MODEL→CLAUDE_MODEL) | azure-openai (AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-5.6-luna; body uses max_completion_tokens — gpt-5.x REJECTS max_tokens); ai.rag span records gen_ai.system + gen_ai.request.model for Langfuse
+- DELIBERATE behavior changes in 01-04 (re-baseline eval runner): judge score-based retry loop removed (single pass + one judge call; transient-error retry kept) and search_depth SNELLE/UITGEBREIDE depth prompt removed for both modes (field still accepted + logged)
+- run_rag returns chunk-derived ToolEvidence (option-A); chat.rs passes it to run_judge — verifier.rs stays disk-based until Phase 3
 
 ### Pending Todos
 
@@ -91,7 +94,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-24 (executed Plan 01-03; seed run executed FOR REAL in the `teun-pdfium-spike` runtime image against `teun-pg-dev` (localhost:15432 from host / host.docker.internal:15432 from containers) with Azure credentials from .env via --env-file)
-Stopped at: Plan 01-03 complete (SUMMARY written). Next: execute Plan 01-04 (retriever + run_rag single-call answer path, delete claude.rs + whole-corpus inline). The 01-01/01-02 checkpoint items are demonstrated working by the live seed run (migration 003 applied, vector(3072) inserts OK, Azure embeddings OK, extraction quality good in practice).
-Resume file: .planning/phases/01-rag-retrieval-core/01-03-SUMMARY.md + this STATE.md.
-Embedding env vars (values live in NextEpoch App settings, key NEVER in repo): AZURE_OPENAI_ENDPOINT=https://dmfco-ai-tools-resource.cognitiveservices.azure.com/ · AZURE_OPENAI_DEPLOYMENT=text-embedding-3-large · AZURE_OPENAI_API_VERSION=2024-02-01 · AZURE_OPENAI_API_KEY=<set in App settings>.
+Last session: 2026-07-24 (executed Plan 01-04 in the `teun-rust-build` helper image; live smoke tests against `teun-pg-dev` (localhost:15432 from host / host.docker.internal:15432 from containers) with real credentials from .env via --env-file — both LLM providers answered the test question with cited line ranges)
+Stopped at: Plan 01-04 auto tasks complete (SUMMARY written). Next: run the 01-04 blocking checkpoint:human-verify (E2E POST /api/teun/chat for both modes, judge event with chunk-derived evidence, docker build Node-free, LLM_PROVIDER flip anthropic↔azure-openai + Langfuse ai.rag span check). After approval: Phase 1 complete.
+Resume file: .planning/phases/01-rag-retrieval-core/01-04-SUMMARY.md + this STATE.md.
+Env for E2E (values in NextEpoch App settings / .env, keys NEVER in repo): DATABASE_URL (pgvector, seeded) · AZURE_OPENAI_ENDPOINT=https://dmfco-ai-tools-resource.cognitiveservices.azure.com/ · AZURE_OPENAI_DEPLOYMENT=text-embedding-3-large · AZURE_OPENAI_API_VERSION=2024-02-01 · AZURE_OPENAI_API_KEY=<set> · ANTHROPIC_API_KEY=<set, also used by judge> · LLM_PROVIDER=anthropic|azure-openai · AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-5.6-luna (azure generation) · optional RAG_MODEL, LANGFUSE_*.
