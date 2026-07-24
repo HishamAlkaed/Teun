@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-07-17)
 ## Current Position
 
 Phase: 1 of 3 (RAG Retrieval Core & PDF Ingestion)
-Plan: 0 of 4 executed (all 4 planned + checked + revised)
-Status: PAUSED — Phase 1 fully planned, ready to execute Plan 01-01
-Last activity: 2026-07-17 — Phase 1 planned (4 plans), plan-checked (PASS w/ concerns), revised, committed on branch gsd/rag-rebuild
+Plan: 1 of 4 executed (01-01 tasks 1-3 done; BLOCKED on its human-verify checkpoint)
+Status: CHECKPOINT — Plan 01-01 awaits human verify (pgvector available + migration applies + Azure env vars set) before 01-02
+Last activity: 2026-07-24 — Executed Plan 01-01 (migration 003, rag store CRUD, embeddings client); commits 789e793/254824c/b00c53a on gsd/rag-rebuild
 
-Progress: [░░░░░░░░░░] 0% (planning done, execution not started)
+Progress: [██░░░░░░░░] ~22% (1 of 4 plans executed, checkpoint pending)
 
 ## Resume Next Week (paused 2026-07-17)
 
@@ -36,15 +36,15 @@ Progress: [░░░░░░░░░░] 0% (planning done, execution not star
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 1 (01-01; checkpoint pending)
+- Average duration: ~25 min
+- Total execution time: ~0.4 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01 | 1 (01-01: 3 tasks, 9 files) | ~25 min | ~25 min |
 
 **Recent Trend:**
 - Last 5 plans: —
@@ -85,7 +85,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-24 (handoff — user continues from NextEpoch platform editor)
-Stopped at: Phase 1 planned; plans reconciled to Azure OpenAI text-embedding-3-large @ 3072 dims (native). Seed PDFs committed to resources/acceptatie/. Execution not started — next action: execute Plan 01-01.
-Resume file: this STATE.md — see "Resume Next Week" section above.
+Last session: 2026-07-24 (executed Plan 01-01 via dockerized cargo — no Rust toolchain on host; used rust:1.92-bookworm + protoc helper image `teun-rust-build` with named volumes teun-cargo-registry/teun-cargo-target)
+Stopped at: Plan 01-01 tasks 1-3 committed + SUMMARY written. BLOCKED on 01-01's checkpoint:human-verify — confirm pgvector available on DATABASE_URL Postgres, migration 003 applies (`Migrations applied`, no `type "vector" does not exist`), schema shape (`\d documents`/`\d chunks`), and AZURE_OPENAI_* set in NextEpoch App settings. Then execute 01-02.
+Resume file: .planning/phases/01-rag-retrieval-core/01-01-SUMMARY.md (checkpoint steps) + this STATE.md.
 Embedding env vars (values live in NextEpoch App settings, key NEVER in repo): AZURE_OPENAI_ENDPOINT=https://dmfco-ai-tools-resource.cognitiveservices.azure.com/ · AZURE_OPENAI_DEPLOYMENT=text-embedding-3-large · AZURE_OPENAI_API_VERSION=2024-02-01 · AZURE_OPENAI_API_KEY=<set in App settings>.
