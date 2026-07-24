@@ -9,6 +9,10 @@ description = "Teun API - AI mortgage advice assistant"
 name = "teun"
 path = "src/main.rs"
 
+[[bin]]
+name = "ingest"
+path = "src/bin/ingest.rs"
+
 [dependencies]
 axum = { workspace = true }
 tokio = { workspace = true }
