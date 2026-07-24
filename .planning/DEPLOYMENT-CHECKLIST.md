@@ -47,10 +47,19 @@ Cost A/B test = flip `LLM_PROVIDER` + set the matching model var, restart. Compa
 ### Vars that DISAPPEAR after plan 01-04
 Claude CLI / OAuth-from-disk path is deleted (no more Node/claude CLI in the image, no `~/.claude/.credentials.json` fallback).
 
-## 3. Post-deploy smoke test
+## 3. Seeding the corpus (choose one)
+
+- **Preferred (Phase 2 shipped):** upload the 4 PDFs through the admin web UI — Documentatie tab → document manager (drag-drop, multi-file). Files: `handboek_acceptatie_versie_2026_4_definitief.pdf`, `MUNT Beheergids 2026.pdf`, `MUNT Hypotheekgids 2026-2.pdf`, `MUNT Voorleggids 2026_002.pdf` (skip near-duplicate `handboek_accept_versie_2026_4.pdf`). Wait until every row shows Geïndexeerd. Expected: 210 chunks total (58/32/79/41).
+- Alternative: `cargo run --bin ingest` on a host with `DATABASE_URL` + Azure vars (reads `RESOURCES_DIR`).
+- Re-upload of an existing filename safely replaces it (upsert + chunk cleanup) — no duplicates.
+
+## 4. Post-deploy smoke test
 
 1. Startup log shows migrations applied, no `type "vector" does not exist`.
-2. Ingestion ran / seed corpus present: `SELECT filename, status, chunk_count FROM documents;` — 4 seed PDFs indexed (skip near-duplicate `handboek_accept_versie_2026_4.pdf`).
-3. `curl -N -X POST .../api/teun/chat -H 'content-type: application/json' -d '{"message":"Wat is de maximale hypotheek?"}'` → SSE `partial` events then `result` with MortgageAnswer (answer/rationale/sources/category), then `judge` event with non-empty source verdicts.
-4. Prompt size in logs = top-K chunks (a few K tokens), not ~100K.
-5. Provider switch test (step 7 of plan 01-04 checkpoint).
+2. Corpus indexed: admin Documentatie tab lists all docs as Geïndexeerd (or `SELECT filename, status, chunk_count FROM documents;`).
+3. `curl -N -X POST .../api/teun/chat -H 'content-type: application/json' -d '{"message":"Wat is de maximale hypotheek?"}'` → SSE `partial` events then `result` with MortgageAnswer (answer/rationale/sources/category), then `judge` event with verified sources (expect 90+ score, N/N verified).
+4. Click a citation in the frontend → DocumentViewer opens extracted text with the cited lines highlighted; the filename link serves the original PDF inline.
+5. Prompt size in logs = top-K chunks (a few K tokens), not ~100K.
+6. Provider switch test: flip `LLM_PROVIDER` to `azure-openai` (+ `AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-5.6-luna`), restart, re-ask; check Langfuse `ai.rag` span shows the deployment; flip back.
+
+Local reference run (2026-07-24, production image against local pgvector): judge 95 with 5/5 and 4/4 verified on two different questions; admin upload→indexed (58 chunks/64 pages in ~10s)→serve-inline→delete-cascade all verified; SSE contract unchanged (contract files untouched across Phases 2-3, evidence in 03-01-SUMMARY.md).
