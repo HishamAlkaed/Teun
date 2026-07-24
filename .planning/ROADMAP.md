@@ -12,7 +12,7 @@ Teun already ships an SSE chat backend, judge, verifier, sessions, eval runner, 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: RAG Retrieval Core & PDF Ingestion** - Replace the whole-corpus/subprocess answer paths with retrieval over ingested PDF passages via a single Anthropic call
+- [x] **Phase 1: RAG Retrieval Core & PDF Ingestion** - Replace the whole-corpus/subprocess answer paths with retrieval over ingested PDF passages via a single Anthropic call
 - [ ] **Phase 2: Admin Document Management (Web)** - Admins upload, list, delete, and serve source PDFs through the web interface, behind portal auth
 - [ ] **Phase 3: Citation Integrity & Interface Preservation** - Quote/line verification and DocumentViewer work against PDF-extracted text; SSE/answer contracts stay unchanged
 
@@ -61,6 +61,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. RAG Retrieval Core & PDF Ingestion | 4/4 | Executed — final human-verify checkpoint pending | 2026-07-24 |
-| 2. Admin Document Management (Web) | 0/TBD | Not started | - |
+| 1. RAG Retrieval Core & PDF Ingestion | 4/4 | Complete (E2E checkpoint passed) | 2026-07-24 |
+| 2. Admin Document Management (Web) | 1/2 | In progress (02-01 backend done; orchestrator smoke pending; 02-02 frontend next) | - |
 | 3. Citation Integrity & Interface Preservation | 0/TBD | Not started | - |

@@ -23,11 +23,11 @@
 
 ### Admin Document Management
 
-- [ ] **ADM-01**: Admin can upload one or more PDFs via a web endpoint (multipart) with MIME-type and size validation, behind existing portal auth
-- [ ] **ADM-02**: Admin can list ingested documents with their status, chunk count, and size (DB-backed)
-- [ ] **ADM-03**: Admin can delete a document, removing its chunks, stored bytes, and metadata row
+- [x] **ADM-01**: Admin can upload one or more PDFs via a web endpoint (multipart) with MIME-type and size validation, behind existing portal auth
+- [x] **ADM-02**: Admin can list ingested documents with their status, chunk count, and size (DB-backed)
+- [x] **ADM-03**: Admin can delete a document, removing its chunks, stored bytes, and metadata row
 - [ ] **ADM-04**: Web admin has a document-manager tab (upload / list / delete / status), replacing the current static "Documentatie" help placeholder (help content preserved)
-- [ ] **ADM-05**: Backend serves the original PDF bytes for a document (inline) so a citation `[N]`/source can open the source
+- [x] **ADM-05**: Backend serves the original PDF bytes for a document (inline) so a citation `[N]`/source can open the source
 
 ### Citation Integrity (interface preservation)
 
@@ -73,11 +73,11 @@
 | ING-02 | Phase 1 | Complete (01-03) |
 | ING-03 | Phase 1 | Pending |
 | ING-04 | Phase 1 | Complete (01-03) |
-| ADM-01 | Phase 2 | Pending |
-| ADM-02 | Phase 2 | Pending |
-| ADM-03 | Phase 2 | Pending |
+| ADM-01 | Phase 2 | Complete (02-01) |
+| ADM-02 | Phase 2 | Complete (02-01) |
+| ADM-03 | Phase 2 | Complete (02-01) |
 | ADM-04 | Phase 2 | Pending |
-| ADM-05 | Phase 2 | Pending |
+| ADM-05 | Phase 2 | Complete (02-01) |
 | CIT-01 | Phase 3 | Pending |
 | CIT-02 | Phase 3 | Pending |
 | CIT-03 | Phase 3 | Pending |

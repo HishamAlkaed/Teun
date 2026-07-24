@@ -5,18 +5,18 @@
 See: .planning/PROJECT.md (updated 2026-07-17)
 
 **Core value:** Grounded, source-cited mortgage-acceptance answers at a fraction of the current per-request cost — by retrieving only relevant policy passages, with citations still verifiable against the source documents.
-**Current focus:** Phase 1 — RAG Retrieval Core & PDF Ingestion
+**Current focus:** Phase 2 — Admin Document Management (Web)
 
 ## Current Position
 
-Phase: 1 of 3 (RAG Retrieval Core & PDF Ingestion)
-Plan: 4 of 4 executed; 01-04 E2E checkpoint RUN AND PASSED (2026-07-24, orchestrator-run over live HTTP/SSE against local pgvector + real keys)
-Status: PHASE 1 CODE-COMPLETE. E2E results: mode=tools and mode=inline both route to run_rag; correct answer (€1.350.000) with cited sources; judge score 95 with 4/4 source verdicts ok (after verifier fix below); provider flip verified over HTTP for BOTH anthropic and azure-openai (gpt-5.6-luna, gen_ai.* span fields present); system_prompt_len=29357 chars ≈ 8k tokens for 8 chunks vs ~110k before (~93% prompt reduction). Retrieval-miss behavior verified honest (model says passages don't cover it; no fabrication).
-Additional commit 06fe9d6: Phase-3 verifier rewire PULLED FORWARD — E2E exposed that verifier.rs read .md from disk while citations reference documents.extracted_text, making every verdict document_not_found (score ~15 on correct answers). verify_sources now loads from the DB (disk fallback kept). Phase 3 scope note: quote/line verification is DONE; remaining Phase-3 scope is DocumentViewer against PDF-extracted text.
+Phase: 2 of 3 (Admin Document Management — Web)
+Plan: 1 of 2 executed (02-01 backend document management DONE; 02-02 frontend document-manager tab next)
+Status: 02-01 complete — POST/GET/DELETE /api/teun/admin/documents + GET /api/teun/documents/{filename}/pdf implemented; full suite 91 passed/0 failed/12 ignored; new store methods live-tested against seeded pgvector DB (7/7 store tests green, seeded 4 docs untouched). Orchestrator live HTTP smoke (upload→indexed→cite→serve→delete) pending per plan verification block. Endpoint contract for 02-02 documented in 02-01-SUMMARY.md "Endpoint Shapes".
+Phase 1: COMPLETE (E2E checkpoint passed 2026-07-24; verifier rewire pulled forward in 06fe9d6).
 Remaining before deploy (user-side, see .planning/DEPLOYMENT-CHECKLIST.md): pgvector on target Postgres, env vars in NextEpoch App settings, seed ingest run against production DB (cargo run --bin ingest).
-Last activity: 2026-07-24 — Executed Plan 01-04 + E2E checkpoint + verifier pull-forward. Full suite 80 passed/0 failed.
+Last activity: 2026-07-24 — Executed Plan 02-01 (backend upload/list/delete/pdf-serve). Commits ce0ff0d, 63bf5be.
 
-Progress: [██████████] 100% of Phase 1 (deploy prereqs user-side)
+Progress: [█████░░░░░] Phase 2: 1/2 plans (Phase 1: 4/4 done)
 
 ## Resume Next Week (paused 2026-07-17)
 
@@ -38,7 +38,7 @@ Progress: [██████████] 100% of Phase 1 (deploy prereqs user-
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4 (01-01, 01-02, 01-03, 01-04)
+- Total plans completed: 5 (01-01, 01-02, 01-03, 01-04, 02-01)
 - Average duration: ~30 min
 - Total execution time: ~2 hours
 
@@ -47,6 +47,7 @@ Progress: [██████████] 100% of Phase 1 (deploy prereqs user-
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 4 (01-01: 3 tasks, 9 files · 01-02: 2 tasks, 5 files · 01-03: 3 tasks, 7 files · 01-04: 4 tasks, 9 files) | ~125 min | ~31 min |
+| 02 | 1 (02-01: 2 tasks, 7 files) | ~15 min | ~15 min |
 
 **Recent Trend:**
 - Last 5 plans: —
@@ -75,6 +76,7 @@ Recent decisions affecting current work:
 - Generation LLM switchable via LLM_PROVIDER=anthropic (default, RAG_MODEL→INLINE_MODEL→CLAUDE_MODEL) | azure-openai (AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-5.6-luna; body uses max_completion_tokens — gpt-5.x REJECTS max_tokens); ai.rag span records gen_ai.system + gen_ai.request.model for Langfuse
 - DELIBERATE behavior changes in 01-04 (re-baseline eval runner): judge score-based retry loop removed (single pass + one judge call; transient-error retry kept) and search_depth SNELLE/UITGEBREIDE depth prompt removed for both modes (field still accepted + logged)
 - run_rag returns chunk-derived ToolEvidence (option-A); chat.rs passes it to run_judge — verifier.rs stays disk-based until Phase 3
+- Admin document endpoints (02-01): no in-service auth (portal fronts /admin, per plan); upload = whole-request 400 on any invalid file; 202 body exactly [{filename, status:"pending"}] (ids come from GET list); pending row pre-created before 202 so the list reflects uploads immediately (ingest re-upserts same id); per-route DefaultBodyLimit 60MB overrides global 64KB; /pdf serves bytea inline with sanitized Content-Disposition
 
 ### Pending Todos
 
@@ -96,7 +98,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-24 (executed Plan 01-04 in the `teun-rust-build` helper image; live smoke tests against `teun-pg-dev` (localhost:15432 from host / host.docker.internal:15432 from containers) with real credentials from .env via --env-file — both LLM providers answered the test question with cited line ranges)
-Stopped at: Plan 01-04 auto tasks complete (SUMMARY written). Next: run the 01-04 blocking checkpoint:human-verify (E2E POST /api/teun/chat for both modes, judge event with chunk-derived evidence, docker build Node-free, LLM_PROVIDER flip anthropic↔azure-openai + Langfuse ai.rag span check). After approval: Phase 1 complete.
-Resume file: .planning/phases/01-rag-retrieval-core/01-04-SUMMARY.md + this STATE.md.
+Last session: 2026-07-24 (executed Plan 02-01 in the `teun-rust-build` helper image; new store methods live-tested against the seeded DB at host.docker.internal:15432 — 7/7 store tests green, 4 seeded documents untouched; full suite 91 passed/0 failed/12 ignored)
+Stopped at: Plan 02-01 complete (SUMMARY written). Next: orchestrator live smoke of the four new endpoints (upload real PDF via curl -F, poll list until indexed, ask citing question, serve /pdf inline, delete, confirm gone), then execute Plan 02-02 (frontend document-manager tab consuming the 02-01 endpoint shapes).
+Resume file: .planning/phases/02-admin-documents/02-01-SUMMARY.md + this STATE.md.
 Env for E2E (values in NextEpoch App settings / .env, keys NEVER in repo): DATABASE_URL (pgvector, seeded) · AZURE_OPENAI_ENDPOINT=https://dmfco-ai-tools-resource.cognitiveservices.azure.com/ · AZURE_OPENAI_DEPLOYMENT=text-embedding-3-large · AZURE_OPENAI_API_VERSION=2024-02-01 · AZURE_OPENAI_API_KEY=<set> · ANTHROPIC_API_KEY=<set, also used by judge> · LLM_PROVIDER=anthropic|azure-openai · AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-5.6-luna (azure generation) · optional RAG_MODEL, LANGFUSE_*.
