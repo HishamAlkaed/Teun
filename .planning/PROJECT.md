@@ -87,6 +87,7 @@ Teun answers a mortgage-acceptance question with a grounded, source-cited answer
 | PDF extraction = pdfium-render | Best text/layout fidelity in Rust for complex policy PDFs | — Pending |
 | Citations = line-based over extracted text | Keeps `verifier.rs` + DocumentViewer + quote/line_range working unchanged; tag chunks with page | — Pending |
 | PDF bytes = Postgres bytea | No Azure blob; transactional with metadata; fine for a handful of PDFs | — Pending |
+| Generation LLM switchable via env (2026-07-24) | `LLM_PROVIDER=anthropic\|azure-openai` + `RAG_MODEL`/`AZURE_OPENAI_CHAT_DEPLOYMENT`; user wants to A/B a cheap Azure model (e.g. gpt-5.6-luna) against Claude on cost; Langfuse `gen_ai.*` span fields record provider+model per answer | — Pending (Plan 01-04) |
 
 ## Evolution
 
