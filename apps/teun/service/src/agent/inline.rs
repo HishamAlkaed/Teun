@@ -194,7 +194,8 @@ pub async fn run_inline(
 
     // Process SSE stream — stream the answer text directly, parse JSON after separator.
     // The streaming loop is shared machinery in agent/stream.rs (extracted from here).
-    let (full_text, session_id) = super::stream::stream_two_phase(resp, &tx).await?;
+    let (full_text, session_id) =
+        super::stream::stream_two_phase(resp, super::stream::SseDialect::Anthropic, &tx).await?;
 
     // Parse structured output from the two-phase response
     let mortgage_answer = super::stream::parse_two_phase_response(&full_text);

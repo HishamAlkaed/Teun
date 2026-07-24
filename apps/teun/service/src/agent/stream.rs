@@ -1,10 +1,12 @@
 //! Shared SSE streaming machinery for the two-phase answer contract.
 //!
 //! Extracted from `inline.rs` (Plan 01-04 T2) so multiple answer paths can
-//! reuse it — logic preserved byte-for-byte:
-//! - `stream_two_phase`: drives an Anthropic Messages SSE response, emitting
+//! reuse it — the accumulate/emit logic is preserved byte-for-byte:
+//! - `stream_two_phase`: drives a streaming SSE response, emitting
 //!   `ChatEvent::Partial` events with char-boundary-safe slicing and stopping
-//!   the partial stream at the `\n---JSON---` separator.
+//!   the partial stream at the `\n---JSON---` separator. The per-provider SSE
+//!   event decode (`SseDialect`) is the only provider-specific step; the
+//!   two-phase separator handling is shared.
 //! - `parse_two_phase_response`: splits the accumulated text at the separator
 //!   and combines the answer text with the parsed JSON metadata.
 
@@ -13,13 +15,86 @@ use tokio::sync::mpsc;
 
 use super::types::{ChatEvent, MortgageAnswer};
 
+/// Which streaming SSE dialect the response speaks. The decode step is the
+/// only provider-specific part of `stream_two_phase`; both dialects funnel
+/// their text deltas through the same two-phase accumulate/emit logic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SseDialect {
+    /// Anthropic Messages API: `message_start` (session id) /
+    /// `content_block_delta` (text) / `message_stop` (flush).
+    Anthropic,
+    /// OpenAI-style chat completions (Azure OpenAI): chunk `id` (session id),
+    /// `choices[0].delta.content` (text), `choices[0].finish_reason` (flush),
+    /// terminated by a `data: [DONE]` sentinel.
+    AzureOpenAi,
+}
+
+/// A decoded SSE `data:` payload, normalized across providers. One payload
+/// can carry several of these at once (e.g. an Azure chunk with both an id
+/// and a content delta), so the fields are independent.
+#[derive(Debug, Default, PartialEq)]
+struct Decoded {
+    session_id: Option<String>,
+    text: Option<String>,
+    /// The provider signalled end-of-message — flush any unstreamed text.
+    stop: bool,
+}
+
+/// Decode one SSE `data:` payload according to the dialect. Unparseable or
+/// irrelevant payloads decode to the empty `Decoded` (ignored), matching the
+/// original loop's silent skip of unknown events.
+fn decode_sse_data(dialect: SseDialect, data: &str) -> Decoded {
+    let mut decoded = Decoded::default();
+    let Ok(event) = serde_json::from_str::<serde_json::Value>(data) else {
+        return decoded;
+    };
+    match dialect {
+        SseDialect::Anthropic => match event.get("type").and_then(|t| t.as_str()) {
+            Some("message_start") => {
+                if let Some(id) = event["message"]["id"].as_str() {
+                    decoded.session_id = Some(id.to_string());
+                }
+            }
+            Some("content_block_delta") => {
+                if let Some(text) = event["delta"]["text"].as_str() {
+                    decoded.text = Some(text.to_string());
+                }
+            }
+            Some("message_stop") => decoded.stop = true,
+            _ => {}
+        },
+        SseDialect::AzureOpenAi => {
+            if let Some(id) = event.get("id").and_then(|i| i.as_str()) {
+                if !id.is_empty() {
+                    decoded.session_id = Some(id.to_string());
+                }
+            }
+            if let Some(choice) = event
+                .get("choices")
+                .and_then(|c| c.as_array())
+                .and_then(|c| c.first())
+            {
+                if let Some(text) = choice["delta"]["content"].as_str() {
+                    decoded.text = Some(text.to_string());
+                }
+                if choice.get("finish_reason").is_some_and(|f| !f.is_null()) {
+                    decoded.stop = true;
+                }
+            }
+        }
+    }
+    decoded
+}
+
 /// Process an SSE streaming response using the two-phase contract:
 /// stream the answer text as `ChatEvent::Partial` events, stop streaming at
 /// the `\n---JSON---` separator, and return the full accumulated text plus
-/// the provider session id (Anthropic `message_start` message id).
+/// the provider session id (Anthropic `message_start` message id / Azure
+/// OpenAI chunk id).
 /// Expected format: "<answer text>\n---JSON---\n{...}"
 pub(crate) async fn stream_two_phase(
     resp: reqwest::Response,
+    dialect: SseDialect,
     tx: &mpsc::Sender<ChatEvent>,
 ) -> Result<(String, String)> {
     const SEPARATOR: &str = "\n---JSON---";
@@ -50,51 +125,43 @@ pub(crate) async fn stream_two_phase(
                     continue;
                 }
 
-                if let Ok(event) = serde_json::from_str::<serde_json::Value>(data) {
-                    match event.get("type").and_then(|t| t.as_str()) {
-                        Some("message_start") => {
-                            if let Some(id) = event["message"]["id"].as_str() {
-                                session_id = id.to_string();
-                            }
-                        }
-                        Some("content_block_delta") => {
-                            if let Some(text) = event["delta"]["text"].as_str() {
-                                full_text.push_str(text);
+                let decoded = decode_sse_data(dialect, data);
+                if let Some(id) = decoded.session_id {
+                    session_id = id;
+                }
+                if let Some(text) = decoded.text {
+                    full_text.push_str(&text);
 
-                                if !separator_found {
-                                    if let Some(sep_pos) = full_text.find(SEPARATOR) {
-                                        // Separator found — emit final answer text and stop streaming
-                                        separator_found = true;
-                                        let answer_text = full_text[..sep_pos].trim_end().to_string();
-                                        if !answer_text.is_empty() {
-                                            let _ = tx.send(ChatEvent::Partial { content: answer_text }).await;
-                                        }
-                                    } else {
-                                        // Stream text up to a safe point, leaving room for partial separator.
-                                        // Snap down to a char boundary so we never slice mid-UTF-8 sequence.
-                                        let mut safe_len = full_text.len().saturating_sub(SEPARATOR.len());
-                                        while safe_len > 0 && !full_text.is_char_boundary(safe_len) {
-                                            safe_len -= 1;
-                                        }
-                                        if safe_len > last_partial_len {
-                                            last_partial_len = safe_len;
-                                            let _ = tx.send(ChatEvent::Partial {
-                                                content: full_text[..safe_len].to_string(),
-                                            }).await;
-                                        }
-                                    }
-                                }
+                    if !separator_found {
+                        if let Some(sep_pos) = full_text.find(SEPARATOR) {
+                            // Separator found — emit final answer text and stop streaming
+                            separator_found = true;
+                            let answer_text = full_text[..sep_pos].trim_end().to_string();
+                            if !answer_text.is_empty() {
+                                let _ = tx.send(ChatEvent::Partial { content: answer_text }).await;
                             }
-                        }
-                        Some("message_stop") => {
-                            // Stream complete — flush any remaining answer text
-                            if !separator_found && full_text.len() > last_partial_len {
+                        } else {
+                            // Stream text up to a safe point, leaving room for partial separator.
+                            // Snap down to a char boundary so we never slice mid-UTF-8 sequence.
+                            let mut safe_len = full_text.len().saturating_sub(SEPARATOR.len());
+                            while safe_len > 0 && !full_text.is_char_boundary(safe_len) {
+                                safe_len -= 1;
+                            }
+                            if safe_len > last_partial_len {
+                                last_partial_len = safe_len;
                                 let _ = tx.send(ChatEvent::Partial {
-                                    content: full_text.trim_end().to_string(),
+                                    content: full_text[..safe_len].to_string(),
                                 }).await;
                             }
                         }
-                        _ => {}
+                    }
+                }
+                if decoded.stop {
+                    // Stream complete — flush any remaining answer text
+                    if !separator_found && full_text.len() > last_partial_len {
+                        let _ = tx.send(ChatEvent::Partial {
+                            content: full_text.trim_end().to_string(),
+                        }).await;
                     }
                 }
             }
@@ -202,5 +269,64 @@ mod tests {
         assert_eq!(answer.answer, "Antwoord.");
         assert!(answer.rationale.is_empty());
         assert!(answer.sources.is_empty());
+    }
+
+    // --- provider-specific SSE decode ---
+
+    #[test]
+    fn anthropic_decode_maps_message_lifecycle() {
+        let start = r#"{"type":"message_start","message":{"id":"msg_abc123"}}"#;
+        let decoded = decode_sse_data(SseDialect::Anthropic, start);
+        assert_eq!(decoded.session_id.as_deref(), Some("msg_abc123"));
+        assert!(decoded.text.is_none());
+        assert!(!decoded.stop);
+
+        let delta = r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hallo"}}"#;
+        let decoded = decode_sse_data(SseDialect::Anthropic, delta);
+        assert_eq!(decoded.text.as_deref(), Some("Hallo"));
+        assert!(decoded.session_id.is_none());
+        assert!(!decoded.stop);
+
+        let stop = r#"{"type":"message_stop"}"#;
+        let decoded = decode_sse_data(SseDialect::Anthropic, stop);
+        assert!(decoded.stop);
+
+        // Irrelevant event types are ignored.
+        let ping = r#"{"type":"ping"}"#;
+        assert_eq!(decode_sse_data(SseDialect::Anthropic, ping), Decoded::default());
+    }
+
+    #[test]
+    fn azure_decode_maps_chat_completion_chunks() {
+        // First chunk: id + role, no content yet.
+        let first = r#"{"id":"chatcmpl-9x","choices":[{"delta":{"role":"assistant"},"finish_reason":null,"index":0}]}"#;
+        let decoded = decode_sse_data(SseDialect::AzureOpenAi, first);
+        assert_eq!(decoded.session_id.as_deref(), Some("chatcmpl-9x"));
+        assert!(decoded.text.is_none());
+        assert!(!decoded.stop);
+
+        // Content delta chunk.
+        let content = r#"{"id":"chatcmpl-9x","choices":[{"delta":{"content":"Hallo"},"finish_reason":null,"index":0}]}"#;
+        let decoded = decode_sse_data(SseDialect::AzureOpenAi, content);
+        assert_eq!(decoded.text.as_deref(), Some("Hallo"));
+        assert!(!decoded.stop);
+
+        // Final chunk: finish_reason set → flush signal.
+        let last = r#"{"id":"chatcmpl-9x","choices":[{"delta":{},"finish_reason":"stop","index":0}]}"#;
+        let decoded = decode_sse_data(SseDialect::AzureOpenAi, last);
+        assert!(decoded.stop);
+        assert!(decoded.text.is_none());
+
+        // Azure content-filter prelude chunk without choices is ignored
+        // (no text, no stop).
+        let prelude = r#"{"id":"","choices":[]}"#;
+        let decoded = decode_sse_data(SseDialect::AzureOpenAi, prelude);
+        assert_eq!(decoded, Decoded::default());
+    }
+
+    #[test]
+    fn garbage_payloads_decode_to_ignored() {
+        assert_eq!(decode_sse_data(SseDialect::Anthropic, "{not json"), Decoded::default());
+        assert_eq!(decode_sse_data(SseDialect::AzureOpenAi, "{not json"), Decoded::default());
     }
 }
