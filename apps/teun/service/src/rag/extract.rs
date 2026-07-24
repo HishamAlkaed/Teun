@@ -76,10 +76,22 @@ pub fn extract_from_bytes(bytes: &[u8]) -> anyhow::Result<Extracted> {
 
     let _pdfium_guard = PDFIUM_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    let bindings = Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("/app"))
-        .or_else(|_| Pdfium::bind_to_system_library())
-        .map_err(|e| anyhow::anyhow!("failed to load PDFium native library: {e:?}"))?;
-    let pdfium = Pdfium::new(bindings);
+    // pdfium-render 0.9 stores dynamic bindings in a process-global OnceLock:
+    // only the FIRST bind succeeds; later binds return
+    // PdfiumLibraryBindingsAlreadyInitialized. In that case Pdfium::default()
+    // reuses the existing global bindings without re-binding (it checks the
+    // global BEFORE attempting any dlopen, so it never panics here).
+    let pdfium = match Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(
+        "/app",
+    ))
+    .or_else(|_| Pdfium::bind_to_system_library())
+    {
+        Ok(bindings) => Pdfium::new(bindings),
+        Err(PdfiumError::PdfiumLibraryBindingsAlreadyInitialized) => Pdfium::default(),
+        Err(e) => {
+            return Err(anyhow::anyhow!("failed to load PDFium native library: {e:?}"));
+        }
+    };
 
     let doc = pdfium
         .load_pdf_from_byte_slice(bytes, None)
