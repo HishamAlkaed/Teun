@@ -9,7 +9,7 @@
 
 - [ ] **RET-01**: pgvector extension enabled and schema created (documents + chunks-with-embedding tables) via sqlx migration
 - [ ] **RET-02**: Embedding client calls OpenAI `text-embedding-3-large` (batch + single query) over reqwest, keyed by env/App setting
-- [ ] **RET-03**: Chunker splits a document's text into chunks, each tagged with `document`, `line_start`, `line_end`, and source `page`
+- [x] **RET-03**: Chunker splits a document's text into chunks, each tagged with `document`, `line_start`, `line_end`, and source `page`
 - [ ] **RET-04**: Retriever embeds a user query and returns the top-K most similar chunks from pgvector
 - [ ] **RET-05**: New answer path builds the prompt from top-K retrieved chunks and makes a single Anthropic Messages call, emitting the existing two-phase `MortgageAnswer`
 - [ ] **RET-06**: `mode` field values (tools/inline) both route to the single RAG answer path; old `run_claude` subprocess and `run_inline` whole-corpus dump are removed
@@ -17,9 +17,9 @@
 ### Ingestion & PDF
 
 - [ ] **ING-01**: pdfium-render extracts text from a PDF into a line-numbered canonical body plus a per-line→page map
-- [ ] **ING-02**: Ingest pipeline runs extract → chunk → embed → store for a single document, tracking status (pending/indexed/error) and chunk count
+- [x] **ING-02**: Ingest pipeline runs extract → chunk → embed → store for a single document, tracking status (pending/indexed/error) and chunk count
 - [ ] **ING-03**: Original uploaded PDF bytes are stored in a Postgres `bytea` column
-- [ ] **ING-04**: The existing `resources/acceptatie/` PDFs can be ingested as the seed corpus (one-shot command or startup seed)
+- [x] **ING-04**: The existing `resources/acceptatie/` PDFs can be ingested as the seed corpus (one-shot command or startup seed)
 
 ### Admin Document Management
 
@@ -65,14 +65,14 @@
 |-------------|-------|--------|
 | RET-01 | Phase 1 | Pending |
 | RET-02 | Phase 1 | Pending |
-| RET-03 | Phase 1 | Pending |
+| RET-03 | Phase 1 | Complete (01-03) |
 | RET-04 | Phase 1 | Pending |
 | RET-05 | Phase 1 | Pending |
 | RET-06 | Phase 1 | Pending |
 | ING-01 | Phase 1 | Pending |
-| ING-02 | Phase 1 | Pending |
+| ING-02 | Phase 1 | Complete (01-03) |
 | ING-03 | Phase 1 | Pending |
-| ING-04 | Phase 1 | Pending |
+| ING-04 | Phase 1 | Complete (01-03) |
 | ADM-01 | Phase 2 | Pending |
 | ADM-02 | Phase 2 | Pending |
 | ADM-03 | Phase 2 | Pending |

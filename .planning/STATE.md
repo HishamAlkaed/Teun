@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-07-17)
 ## Current Position
 
 Phase: 1 of 3 (RAG Retrieval Core & PDF Ingestion)
-Plan: 2 of 4 executed (01-02 tasks 1-2 done; BLOCKED on its human-verify quality gate. 01-01 checkpoint also still pending)
-Status: CHECKPOINT — Plan 01-02 awaits human verify (extraction quality gate; executor recommends approve, no .md fallback). Plan 01-01 checkpoint (pgvector + Azure env vars) also outstanding.
-Last activity: 2026-07-24 — Executed Plan 01-02 (pdfium extract.rs + PDFium chromium/7881 bundled in Docker, spike PASSED on all 4 seed PDFs in-image); commits e4fc501/cf7d436/e08eecb on gsd/rag-rebuild
+Plan: 3 of 4 executed (01-03 COMPLETE — all 3 tasks done, seed corpus live: 4 docs indexed, 210 chunks in pgvector)
+Status: READY — next execute Plan 01-04 (retriever + run_rag swap, delete claude.rs). Earlier 01-01/01-02 human checkpoints effectively satisfied by the live seed run (pgvector migration applied, Azure embeddings working, extraction quality proven in production path).
+Last activity: 2026-07-24 — Executed Plan 01-03 (chunk.rs + ingest.rs + bin/ingest); REAL seed run against teun-pg-dev with Azure embeddings: all 4 acceptatie PDFs status=indexed (58/32/79/41 chunks, 210 total), re-run idempotent (total unchanged). Commits c9583e4/79730c7/a925510/41802f8 on gsd/rag-rebuild.
 
-Progress: [█████░░░░░] ~45% (2 of 4 plans executed, checkpoints pending)
+Progress: [███████░░░] ~70% (3 of 4 plans executed)
 
 ## Resume Next Week (paused 2026-07-17)
 
 **Branch:** `gsd/rag-rebuild` (all planning committed; Teun default branch = `main`).
 
-**Next action:** execute Phase 1 Plan `01-01` (data layer + embeddings). Then 01-02 → 01-03 → 01-04 in order (sequential waves).
+**Next action:** execute Phase 1 Plan `01-04` (retriever + run_rag swap). Plans 01-01/01-02/01-03 are complete; the seed corpus is live in pgvector.
 
 **Do BEFORE executing (prereqs, user-side):**
 1. pgvector `vector` extension available on target Postgres (Plan 01-01 has a blocking checkpoint that checks `pg_available_extensions`).
@@ -36,15 +36,15 @@ Progress: [█████░░░░░] ~45% (2 of 4 plans executed, checkpoi
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2 (01-01, 01-02; checkpoints pending)
-- Average duration: ~35 min
-- Total execution time: ~1.2 hours
+- Total plans completed: 3 (01-01, 01-02, 01-03)
+- Average duration: ~30 min
+- Total execution time: ~1.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 2 (01-01: 3 tasks, 9 files · 01-02: 2 tasks, 5 files) | ~70 min | ~35 min |
+| 01 | 3 (01-01: 3 tasks, 9 files · 01-02: 2 tasks, 5 files · 01-03: 3 tasks, 7 files) | ~90 min | ~30 min |
 
 **Recent Trend:**
 - Last 5 plans: —
@@ -64,6 +64,10 @@ Recent decisions affecting current work:
 - PDF extraction = pdfium-render (PDFium native lib must be bundled in Docker)
 - PDFium pinned to bblanchon chromium/7881 (= pdfium-render 0.9.3 pdfium_latest), sha256-checked in docker build; .so loads + extracts all 4 seed PDFs in the runtime image (spike PASSED; executor verdict: quality GOOD, no .md fallback)
 - PDFium is NOT thread-safe — all native access serialized via process-wide mutex in rag::extract; call extract_from_bytes via spawn_blocking from async contexts
+- PDFium binds ONCE per process (pdfium-render global OnceLock): extract handles PdfiumLibraryBindingsAlreadyInitialized by reusing existing bindings via Pdfium::default() (fix a925510)
+- Chunking = 700 cl100k tokens / 120 overlap via text-splitter chunk_indices; line_start/line_end from byte offsets, page from Canonical::page_of_line
+- Idempotent ingest lives IN ingest_document (filename upsert + delete_chunks before re-chunk) — any caller is re-run safe; verified live (210 chunks stable across re-runs)
+- Seed corpus LIVE in teun-pg-dev: 4 docs indexed (handboek_definitief 58, Beheergids 32, Hypotheekgids 79, Voorleggids 41 = 210 chunks); near-duplicate handboek skipped
 - Citations = line-based over extracted text (store line-numbered canonical body; tag chunks with page)
 - PDF bytes stored in Postgres `bytea`; `mode` field (tools/inline) collapses to one RAG answer path
 
@@ -87,7 +91,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-24 (executed Plan 01-02 via dockerized cargo helper `teun-rust-build`; full image built as `teun-pdfium-spike`, PDFium spike PASSED in-image on all 4 seed PDFs)
-Stopped at: Plan 01-02 tasks 1-2 committed + SUMMARY written. BLOCKED on TWO human-verify checkpoints before 01-03: (a) 01-01 — pgvector available on DATABASE_URL Postgres, migration 003 applies, AZURE_OPENAI_* set in NextEpoch App settings; (b) 01-02 — extraction quality gate (executor recommends "approved: PDFium loads, extraction quality acceptable", no .md fallback). Then execute 01-03 (chunker + ingest + seed).
-Resume file: .planning/phases/01-rag-retrieval-core/01-02-SUMMARY.md + 01-01-SUMMARY.md (checkpoint steps) + this STATE.md.
+Last session: 2026-07-24 (executed Plan 01-03; seed run executed FOR REAL in the `teun-pdfium-spike` runtime image against `teun-pg-dev` (localhost:15432 from host / host.docker.internal:15432 from containers) with Azure credentials from .env via --env-file)
+Stopped at: Plan 01-03 complete (SUMMARY written). Next: execute Plan 01-04 (retriever + run_rag single-call answer path, delete claude.rs + whole-corpus inline). The 01-01/01-02 checkpoint items are demonstrated working by the live seed run (migration 003 applied, vector(3072) inserts OK, Azure embeddings OK, extraction quality good in practice).
+Resume file: .planning/phases/01-rag-retrieval-core/01-03-SUMMARY.md + this STATE.md.
 Embedding env vars (values live in NextEpoch App settings, key NEVER in repo): AZURE_OPENAI_ENDPOINT=https://dmfco-ai-tools-resource.cognitiveservices.azure.com/ · AZURE_OPENAI_DEPLOYMENT=text-embedding-3-large · AZURE_OPENAI_API_VERSION=2024-02-01 · AZURE_OPENAI_API_KEY=<set in App settings>.
