@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-07-17)
 ## Current Position
 
 Phase: 1 of 3 (RAG Retrieval Core & PDF Ingestion)
-Plan: 1 of 4 executed (01-01 tasks 1-3 done; BLOCKED on its human-verify checkpoint)
-Status: CHECKPOINT — Plan 01-01 awaits human verify (pgvector available + migration applies + Azure env vars set) before 01-02
-Last activity: 2026-07-24 — Executed Plan 01-01 (migration 003, rag store CRUD, embeddings client); commits 789e793/254824c/b00c53a on gsd/rag-rebuild
+Plan: 2 of 4 executed (01-02 tasks 1-2 done; BLOCKED on its human-verify quality gate. 01-01 checkpoint also still pending)
+Status: CHECKPOINT — Plan 01-02 awaits human verify (extraction quality gate; executor recommends approve, no .md fallback). Plan 01-01 checkpoint (pgvector + Azure env vars) also outstanding.
+Last activity: 2026-07-24 — Executed Plan 01-02 (pdfium extract.rs + PDFium chromium/7881 bundled in Docker, spike PASSED on all 4 seed PDFs in-image); commits e4fc501/cf7d436/e08eecb on gsd/rag-rebuild
 
-Progress: [██░░░░░░░░] ~22% (1 of 4 plans executed, checkpoint pending)
+Progress: [█████░░░░░] ~45% (2 of 4 plans executed, checkpoints pending)
 
 ## Resume Next Week (paused 2026-07-17)
 
@@ -36,15 +36,15 @@ Progress: [██░░░░░░░░] ~22% (1 of 4 plans executed, checkpoi
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (01-01; checkpoint pending)
-- Average duration: ~25 min
-- Total execution time: ~0.4 hours
+- Total plans completed: 2 (01-01, 01-02; checkpoints pending)
+- Average duration: ~35 min
+- Total execution time: ~1.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 1 (01-01: 3 tasks, 9 files) | ~25 min | ~25 min |
+| 01 | 2 (01-01: 3 tasks, 9 files · 01-02: 2 tasks, 5 files) | ~70 min | ~35 min |
 
 **Recent Trend:**
 - Last 5 plans: —
@@ -62,6 +62,8 @@ Recent decisions affecting current work:
 - Vector store = pgvector (reuse existing sqlx + Postgres)
 - Embeddings = Azure OpenAI `text-embedding-3-large`, native 3072-dim (deployment `text-embedding-3-large`, api-version 2024-02-01, endpoint dmfco-ai-tools-resource). pgvector column `VECTOR(3072)`. Plain OpenAI = fallback only. App deployed on NextEpoch; Azure is outbound embeddings API only. Key lives in NextEpoch App settings, never committed.
 - PDF extraction = pdfium-render (PDFium native lib must be bundled in Docker)
+- PDFium pinned to bblanchon chromium/7881 (= pdfium-render 0.9.3 pdfium_latest), sha256-checked in docker build; .so loads + extracts all 4 seed PDFs in the runtime image (spike PASSED; executor verdict: quality GOOD, no .md fallback)
+- PDFium is NOT thread-safe — all native access serialized via process-wide mutex in rag::extract; call extract_from_bytes via spawn_blocking from async contexts
 - Citations = line-based over extracted text (store line-numbered canonical body; tag chunks with page)
 - PDF bytes stored in Postgres `bytea`; `mode` field (tools/inline) collapses to one RAG answer path
 
@@ -72,7 +74,7 @@ None yet.
 ### Blockers/Concerns
 
 - Brownfield: SSE `ChatEvent` + `MortgageAnswer`/`SourceReference` + existing REST endpoints must stay backward-compatible (frontend, judge, eval, sessions depend on them).
-- `pdfium-render` requires the PDFium native library bundled into the Docker image before Phase 1 ships.
+- ~~`pdfium-render` requires the PDFium native library bundled into the Docker image before Phase 1 ships.~~ RESOLVED by Plan 01-02 (chromium/7881 bundled, in-image extraction verified).
 - pgvector `vector` extension must be enabled via sqlx migration before the app serves traffic.
 
 ## Deferred Items
@@ -85,7 +87,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-24 (executed Plan 01-01 via dockerized cargo — no Rust toolchain on host; used rust:1.92-bookworm + protoc helper image `teun-rust-build` with named volumes teun-cargo-registry/teun-cargo-target)
-Stopped at: Plan 01-01 tasks 1-3 committed + SUMMARY written. BLOCKED on 01-01's checkpoint:human-verify — confirm pgvector available on DATABASE_URL Postgres, migration 003 applies (`Migrations applied`, no `type "vector" does not exist`), schema shape (`\d documents`/`\d chunks`), and AZURE_OPENAI_* set in NextEpoch App settings. Then execute 01-02.
-Resume file: .planning/phases/01-rag-retrieval-core/01-01-SUMMARY.md (checkpoint steps) + this STATE.md.
+Last session: 2026-07-24 (executed Plan 01-02 via dockerized cargo helper `teun-rust-build`; full image built as `teun-pdfium-spike`, PDFium spike PASSED in-image on all 4 seed PDFs)
+Stopped at: Plan 01-02 tasks 1-2 committed + SUMMARY written. BLOCKED on TWO human-verify checkpoints before 01-03: (a) 01-01 — pgvector available on DATABASE_URL Postgres, migration 003 applies, AZURE_OPENAI_* set in NextEpoch App settings; (b) 01-02 — extraction quality gate (executor recommends "approved: PDFium loads, extraction quality acceptable", no .md fallback). Then execute 01-03 (chunker + ingest + seed).
+Resume file: .planning/phases/01-rag-retrieval-core/01-02-SUMMARY.md + 01-01-SUMMARY.md (checkpoint steps) + this STATE.md.
 Embedding env vars (values live in NextEpoch App settings, key NEVER in repo): AZURE_OPENAI_ENDPOINT=https://dmfco-ai-tools-resource.cognitiveservices.azure.com/ · AZURE_OPENAI_DEPLOYMENT=text-embedding-3-large · AZURE_OPENAI_API_VERSION=2024-02-01 · AZURE_OPENAI_API_KEY=<set in App settings>.
