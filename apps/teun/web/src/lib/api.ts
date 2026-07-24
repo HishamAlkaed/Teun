@@ -189,3 +189,54 @@ export async function getRecentRejections(): Promise<RejectedMessage[]> {
   if (!res.ok) return [];
   return await res.json() as RejectedMessage[];
 }
+
+// --- Admin documents ---
+
+export interface AdminDocument {
+  id: string;
+  filename: string;
+  status: "pending" | "indexing" | "indexed" | "error";
+  chunk_count: number;
+  page_count: number;
+  size_bytes: number;
+  error_message: string | null;
+  created_at: string;
+  indexed_at: string | null;
+}
+
+export interface UploadResult {
+  filename: string;
+  status: string;
+}
+
+export async function listAdminDocuments(): Promise<AdminDocument[]> {
+  const res = await fetch(`${API_BASE}/admin/documents`);
+  if (!res.ok) return [];
+  return await res.json() as AdminDocument[];
+}
+
+export async function uploadDocuments(files: FileList | File[]): Promise<UploadResult[]> {
+  const formData = new FormData();
+  for (const file of Array.from(files)) {
+    formData.append("file", file);
+  }
+  const res = await fetch(`${API_BASE}/admin/documents`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(data.error || "Upload mislukt");
+  }
+  return await res.json() as UploadResult[];
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/documents/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(data.error || "Kon document niet verwijderen");
+  }
+}
