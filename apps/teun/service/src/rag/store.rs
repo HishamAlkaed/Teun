@@ -143,6 +143,18 @@ impl RagStore {
         Ok(())
     }
 
+    /// Delete all chunks of a document (idempotent re-ingest: the upserted
+    /// document keeps its id, so stale chunks must be dropped before
+    /// re-chunking to avoid duplicates).
+    pub async fn delete_chunks(&self, document_id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM chunks WHERE document_id = $1")
+            .bind(document_id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete chunks")?;
+        Ok(())
+    }
+
     pub async fn get_document(&self, id: &str) -> Result<Option<Document>> {
         let row = sqlx::query(
             "SELECT id, filename, extracted_text, page_count, status, chunk_count \
