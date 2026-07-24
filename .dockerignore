@@ -1,0 +1,8 @@
+# Never ship host dependency trees into the build context: both toolchains
+# install their own deps in-image (frontend stage: npm ci; builder: cargo).
+# The host node_modules may also contain Linux symlinks (written by in-container
+# npm ci on this Windows host) that break context transfer outright.
+**/node_modules
+
+# VCS metadata is never COPY'd by any stage; excluding it keeps the context small.
+.git

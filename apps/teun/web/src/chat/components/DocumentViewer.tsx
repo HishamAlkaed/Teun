@@ -15,6 +15,8 @@ interface DocumentData {
   highlight_start: number | null;
   highlight_end: number | null;
   highlight_out_of_bounds?: boolean;
+  /** Additive backend field: "pdf_text" (DB extracted text) | "markdown" (disk .md). */
+  content_type?: string;
 }
 
 export function DocumentViewer({ filename, lineRange, section, onClose }: DocumentViewerProps) {
@@ -38,7 +40,14 @@ export function DocumentViewer({ filename, lineRange, section, onClose }: Docume
         }
         return res.json() as Promise<DocumentData>;
       })
-      .then(setDoc)
+      .then((data) => {
+        setDoc(data);
+        // PDF-extracted text is not markdown: default to the line view so the
+        // cited range is readable. The user can still toggle to "Opgemaakt".
+        if (data.content_type === "pdf_text") {
+          setViewMode("lines");
+        }
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [filename, lineRange]);
