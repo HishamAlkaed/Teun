@@ -4,4 +4,5 @@
 //! - `store`: `documents`/`chunks` CRUD over sqlx (no top-K query yet — Plan 04)
 //! - `embed`: OpenAI/Azure `text-embedding-3-large` client (batch + single)
 
+pub mod embed;
 pub mod store;
