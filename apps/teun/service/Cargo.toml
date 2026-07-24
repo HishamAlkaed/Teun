@@ -30,3 +30,7 @@ tower_governor = { version = "0.8", features = ["axum"] }
 reqwest = { workspace = true }
 futures = "0.3"
 tokio-stream = "0.1"
+pdfium-render = "0.9"
+pgvector = { version = "0.4", features = ["sqlx"] }
+tiktoken-rs = "0.12"
+text-splitter = { version = "0.32", features = ["tiktoken-rs"] }
