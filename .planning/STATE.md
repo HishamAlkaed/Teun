@@ -10,11 +10,13 @@ See: .planning/PROJECT.md (updated 2026-07-17)
 ## Current Position
 
 Phase: 1 of 3 (RAG Retrieval Core & PDF Ingestion)
-Plan: 4 of 4 executed (01-04 auto tasks COMPLETE — retriever + run_rag + provider switch + repoint + deletions; final human-verify E2E checkpoint PENDING)
-Status: CHECKPOINT — Plan 01-04's blocking checkpoint:human-verify remains (E2E chat via /api/teun/chat, judge evidence, provider flip, docker image build). Both providers were already runtime-verified via the env-gated smoke harness (anthropic claude-opus-4-6 and azure-openai gpt-5.6-luna).
-Last activity: 2026-07-24 — Executed Plan 01-04: rag::store::search (top-8, <=>), agent/stream.rs (shared two-phase SSE loop + SseDialect provider decode), agent/rag.rs (run_rag with LLM_PROVIDER=anthropic|azure-openai, chunk-derived ToolEvidence to judge), chat.rs single path (depth instruction + judge retry loop deliberately removed), claude.rs + inline.rs deleted, Dockerfile de-Node'd. Full suite 80 passed/0 failed. Commits a65efd7/7f76c61/ab218fe/f46fff7 on gsd/rag-rebuild.
+Plan: 4 of 4 executed; 01-04 E2E checkpoint RUN AND PASSED (2026-07-24, orchestrator-run over live HTTP/SSE against local pgvector + real keys)
+Status: PHASE 1 CODE-COMPLETE. E2E results: mode=tools and mode=inline both route to run_rag; correct answer (€1.350.000) with cited sources; judge score 95 with 4/4 source verdicts ok (after verifier fix below); provider flip verified over HTTP for BOTH anthropic and azure-openai (gpt-5.6-luna, gen_ai.* span fields present); system_prompt_len=29357 chars ≈ 8k tokens for 8 chunks vs ~110k before (~93% prompt reduction). Retrieval-miss behavior verified honest (model says passages don't cover it; no fabrication).
+Additional commit 06fe9d6: Phase-3 verifier rewire PULLED FORWARD — E2E exposed that verifier.rs read .md from disk while citations reference documents.extracted_text, making every verdict document_not_found (score ~15 on correct answers). verify_sources now loads from the DB (disk fallback kept). Phase 3 scope note: quote/line verification is DONE; remaining Phase-3 scope is DocumentViewer against PDF-extracted text.
+Remaining before deploy (user-side, see .planning/DEPLOYMENT-CHECKLIST.md): pgvector on target Postgres, env vars in NextEpoch App settings, seed ingest run against production DB (cargo run --bin ingest).
+Last activity: 2026-07-24 — Executed Plan 01-04 + E2E checkpoint + verifier pull-forward. Full suite 80 passed/0 failed.
 
-Progress: [█████████░] ~95% (4 of 4 plans executed; 01-04 human checkpoint pending)
+Progress: [██████████] 100% of Phase 1 (deploy prereqs user-side)
 
 ## Resume Next Week (paused 2026-07-17)
 
