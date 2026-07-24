@@ -120,6 +120,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(routes::settings::router())
         .merge(routes::health::router())
         .merge(routes::admin::router())
+        .merge(routes::admin_documents::router())
         .merge(routes::documents::router());
 
     // Optional rate limiting (per-IP). Set RATE_LIMIT_PER_SECOND=0 to disable.

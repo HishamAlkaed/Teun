@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod admin_documents;
 pub mod chat;
 pub mod documents;
 pub mod health;

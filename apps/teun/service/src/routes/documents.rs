@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
 use axum::{Json, Router};
 use serde::Deserialize;
 
+use crate::rag::store::RagStore;
 use crate::AppState;
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -14,6 +15,10 @@ pub fn router() -> Router<Arc<AppState>> {
         .route(
             "/api/teun/documents/{filename}",
             axum::routing::get(get_document),
+        )
+        .route(
+            "/api/teun/documents/{filename}/pdf",
+            axum::routing::get(get_document_pdf),
         )
 }
 
@@ -135,6 +140,65 @@ async fn get_document(
     (StatusCode::OK, Json(response)).into_response()
 }
 
+/// Serve the stored original PDF bytes inline from `documents.original_bytes`
+/// (ADM-05). The filename doubles as the lookup key, matching the citation
+/// `document` field used elsewhere.
+async fn get_document_pdf(
+    State(state): State<Arc<AppState>>,
+    Path(filename): Path<String>,
+) -> impl IntoResponse {
+    // Path traversal protection (defense in depth: the lookup is a DB equality
+    // match, but reject separators outright like GET /documents/{filename}).
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Ongeldige bestandsnaam" })),
+        )
+            .into_response();
+    }
+
+    let store = RagStore::new(state.pool.clone());
+    match store.get_pdf_bytes(&filename).await {
+        Ok(Some(bytes)) => {
+            let disposition = format!(
+                "inline; filename=\"{}\"",
+                sanitize_header_filename(&filename)
+            );
+            (
+                StatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, "application/pdf".to_string()),
+                    (header::CONTENT_DISPOSITION, disposition),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Document niet gevonden" })),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = format!("{e:#}"), "Failed to get pdf bytes");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Kon document niet ophalen" })),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Make a filename safe for a quoted Content-Disposition value: header values
+/// must be visible ASCII, and `"` / `\` would break out of the quoted string.
+fn sanitize_header_filename(filename: &str) -> String {
+    filename
+        .chars()
+        .filter(|c| (c.is_ascii_graphic() || *c == ' ') && *c != '"' && *c != '\\')
+        .collect()
+}
+
 /// Parse a line range string like "120-135" or "42" into (start, end) 1-indexed inclusive.
 fn parse_line_range(s: &str) -> (Option<usize>, Option<usize>) {
     if let Some((start, end)) = s.split_once('-') {
@@ -203,5 +267,21 @@ mod tests {
     fn valid_filename_passes() {
         let filename = "acceptatiebeleid.md";
         assert!(!filename.contains("..") && !filename.contains('/') && !filename.contains('\\'));
+    }
+
+    #[test]
+    fn sanitize_header_filename_keeps_normal_names() {
+        assert_eq!(
+            sanitize_header_filename("MUNT Hypotheekgids 2026-2.pdf"),
+            "MUNT Hypotheekgids 2026-2.pdf"
+        );
+    }
+
+    #[test]
+    fn sanitize_header_filename_strips_quotes_and_controls() {
+        assert_eq!(
+            sanitize_header_filename("a\"b\\c\r\nd\u{1F600}.pdf"),
+            "abcd.pdf"
+        );
     }
 }
