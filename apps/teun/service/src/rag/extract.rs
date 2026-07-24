@@ -211,4 +211,42 @@ mod tests {
         let res = extract_from_bytes(b"this is definitely not a PDF document");
         assert!(res.is_err());
     }
+
+    /// Manual spike harness for the Plan 01-02 human checkpoint (extraction
+    /// quality gate on the seed PDFs). Not a pass/fail quality judgment —
+    /// prints stats + samples for human review.
+    ///
+    /// Usage (inside a container with libpdfium.so):
+    ///   TEUN_SPIKE_PDF=/path/to/doc.pdf cargo test --package teun \
+    ///     rag::extract::tests::spike_extract_pdf_from_env -- --ignored --nocapture
+    #[test]
+    #[ignore = "manual spike: set TEUN_SPIKE_PDF and run with --nocapture"]
+    fn spike_extract_pdf_from_env() {
+        let Ok(path) = std::env::var("TEUN_SPIKE_PDF") else {
+            println!("TEUN_SPIKE_PDF not set; skipping spike");
+            return;
+        };
+        let bytes = std::fs::read(&path).expect("read PDF");
+        let extracted = extract_from_bytes(&bytes).expect("extract PDF");
+        let canonical = &extracted.canonical;
+        let line_count = canonical.text.lines().count();
+        assert_eq!(canonical.page_of_line.len(), line_count);
+        println!("=== {path} ===");
+        println!(
+            "bytes={} pages={} lines={} chars={}",
+            bytes.len(),
+            extracted.page_count,
+            line_count,
+            canonical.text.chars().count()
+        );
+        println!("--- first 25 lines ---");
+        for (i, line) in canonical.text.lines().take(25).enumerate() {
+            println!("{:>5} [p{:>3}] {line}", i + 1, canonical.page_of_line[i]);
+        }
+        let mid = line_count / 2;
+        println!("--- 15 lines from the middle (line {}) ---", mid + 1);
+        for (i, line) in canonical.text.lines().enumerate().skip(mid).take(15) {
+            println!("{:>5} [p{:>3}] {line}", i + 1, canonical.page_of_line[i]);
+        }
+    }
 }
